@@ -181,12 +181,6 @@
 3. **Android app** third — once server+web are proven
 4. **Play Store** fourth — once app is polished
 
-## Estimated Timeline
-- Phase 1 (Server): 2-3 days
-- Phase 2 (Web): 1-2 days  
-- Phase 3 (Android): 3-5 days
-- Phase 4 (Play Store): 14+ days (mandatory testing period)
-
 ---
 
 *Created: 2026-02-12*
