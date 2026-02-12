@@ -1,0 +1,35 @@
+# Environment
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Database
+*.db
+*.sqlite3
+
+# Audio cache
+server/sounds/cache/
+
+# Android
+app/.gradle/
+app/build/
+app/local.properties
+app/*.iml
+app/.idea/
+app/captures/
+app/.externalNativeBuild/
+app/.cxx/
+
+# Web
+web/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
