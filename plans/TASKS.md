@@ -19,12 +19,10 @@
 - [ ] JSON control messages (connect, hangup, status)
 - [ ] Register "websocket" in `resolveProvider()` in runtime.ts
 
-### 1.3 Device Pairing & Auth
-- [ ] JWT-based auth (jsonwebtoken package)
-- [ ] POST `/api/pair` — generate 6-digit code, notify Jarvis via WhatsApp
-- [ ] POST `/api/confirm` — verify code, return JWT
-- [ ] SQLite or JSON file for paired devices
-- [ ] WebSocket auth middleware (validate JWT on connect)
+### 1.3 Connection Auth
+- [ ] SSL/WSS handles transport security
+- [ ] Health check endpoint `/api/health` for app connection verification
+- [ ] If you can reach the server, you can talk (secured by firewall + SSL)
 
 ### 1.4 Edge TTS Adapter
 - [ ] Create `src/tts-edge.ts` implementing `TelephonyTtsProvider`
@@ -71,8 +69,7 @@
 
 ### 2.1 UI
 - [ ] Dark-themed single-page HTML
-- [ ] Setup flow: server address, pairing code
-- [ ] Big "Call Jarvis" button
+- [ ] Big "Call Jarvis" button (no setup needed — page is on the server)
 - [ ] Status indicators (connecting, ringing, listening, responding)
 - [ ] Transcript display
 - [ ] Hang up button
@@ -101,9 +98,8 @@
 - [ ] Permissions: RECORD_AUDIO, INTERNET, FOREGROUND_SERVICE
 
 ### 3.2 Setup Screen
-- [ ] Server address + port input
-- [ ] Pairing flow with 6-digit code
-- [ ] JWT stored in Android Keystore
+- [ ] Server address + port input (one-time, stored in SharedPreferences)
+- [ ] Connection test (hit /api/health)
 - [ ] Self-signed cert trust
 
 ### 3.3 Call Screen
