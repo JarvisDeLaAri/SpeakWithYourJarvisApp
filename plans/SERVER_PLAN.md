@@ -1,143 +1,147 @@
-# Server Plan — Pipecat Voice Pipeline
+# Server Plan v2 — OpenClaw Plugin Fork
 
 ## Overview
-Python server using Pipecat framework to handle real-time voice conversations over WebSocket. Receives raw audio from clients (app/web), runs through VAD → STT → LLM (OpenClaw) → TTS pipeline, streams audio back.
+Fork OpenClaw's `@openclaw/voice-call` extension. Keep the architecture (call manager, state machine, media streaming, agent integration). Replace 3 paid components with free alternatives.
 
-## Components
+## Source Location
+Original: `openclaw-source/extensions/voice-call/`
 
-### 1. WebSocket Transport
-- Accept WebSocket connections on configurable port (HTTPS)
-- Protocol: Binary audio frames (16-bit PCM, 16kHz mono) + JSON control messages
-- Auth: Bearer token in connection handshake (from device pairing)
-- Handle multiple clients (though typically 1 at a time)
+## What We Keep (unchanged)
+```
+src/
+├── manager/           # Call lifecycle, state machine
+│   ├── context.ts     # Call context
+│   ├── store.ts       # Active calls storage
+│   ├── timers.ts      # Timeout management
+│   ├── lookup.ts      # Call lookup
+│   ├── state.ts       # State transitions
+│   ├── events.ts      # Event handling
+│   └── outbound.ts    # Outbound call logic
+├── types.ts           # Type definitions
+├── voice-mapping.ts   # Voice configuration
+├── config.ts          # Plugin config schema (extend)
+└── runtime.ts         # Plugin runtime (modify to add our providers)
+```
 
-### 2. Silero VAD (Voice Activity Detection)
-- **THE key fix** — replaces dumb silence detection
-- Silero V5 ONNX model (~2MB)
-- Runs on 30ms audio chunks
-- Detects speech start/end with ML accuracy
-- Configurable `stop_secs` (how long silence = "done talking", default 0.6s)
-- Filters out background noise (AC, fan, street) that currently triggers false transcriptions
+## What We Build (3 new files)
 
-### 3. Whisper STT (Speech to Text)
-- Local Whisper (tiny or base model)
-- Receives clean audio segments from VAD (not raw noisy stream)
-- Only transcribes when VAD says "speech detected" — no more noise-as-sentences
-- Streaming approach: accumulate VAD speech frames → on speech end → transcribe batch
+### 1. `src/providers/websocket.ts` — WebSocket Telephony Provider
 
-### 4. OpenClaw LLM Integration
-- HTTP POST to OpenClaw Chat Completions API (`/v1/chat/completions`)
-- Uses gateway token for auth
-- Sends user's transcribed text
-- Receives Jarvis's response (streamed)
-- Maintains conversation context (last N turns) for continuity within the call
+Implements `VoiceCallProvider` interface. Instead of dialing a phone number:
 
-### 5. Edge TTS (Text to Speech)
-- Microsoft Edge TTS (free, no API key)
-- Voice: en-GB-RyanNeural (British Ryan)
-- Streaming: start playing audio before full response is generated
-- Chunk response by sentence boundaries for faster first-byte
+```typescript
+interface VoiceCallProvider {
+  makeCall(params: { to: string; from: string; webhookUrl: string }): Promise<CallResult>;
+  endCall(callId: string): Promise<void>;
+  // ...
+}
+```
 
-### 6. Device Pairing & Auth
-- `/api/pair` endpoint: client sends device name → server generates 6-digit code
-- Server logs code to console + sends to Jarvis (WhatsApp notification)
-- `/api/confirm` endpoint: client sends code → server returns persistent JWT token
-- All subsequent WebSocket connections require valid token
-- Paired devices stored in SQLite
+Our WebSocket provider:
+- Runs a WSS server (on plugin's configured port)
+- Clients connect directly — no phone network
+- "makeCall" = send push notification to paired device → device connects back
+- "endCall" = close WebSocket
+- Audio: binary PCM frames bidirectional
+- Device auth: JWT token from pairing flow
 
-### 7. Call Sounds
-- Pre-generated audio files in `sounds/` directory:
-  - `ring.wav` — 0.7s phone ring tone
-  - `pickup.wav` — phone pickup click
-  - `greeting_morning.wav` — "Good morning, sir"
-  - `greeting_afternoon.wav` — "Good afternoon, sir"
-  - `greeting_evening.wav` — "Good evening, sir"
-  - `greeting_night.wav` — "Good night, sir"
-- Server sends appropriate greeting based on client's timezone (sent in connect message)
+**Pairing flow:**
+- Client POST `/api/pair` with device name → server generates 6-digit code
+- Code shown in Jarvis's WhatsApp chat
+- Client POST `/api/confirm` with code → gets JWT
+- JWT stored on device, sent in WebSocket handshake
 
-## Message Protocol (WebSocket)
+### 2. `src/tts-edge.ts` — Edge TTS Adapter
 
-### Client → Server
+Implements `TelephonyTtsProvider` interface:
+
+```typescript
+interface TelephonyTtsProvider {
+  synthesizeForTelephony(text: string): Promise<Buffer>;
+}
+```
+
+Our implementation:
+- Uses `edge-tts` npm package (or spawn `edge-tts` Python CLI)
+- Voice: en-GB-RyanNeural (configurable)
+- Returns PCM buffer (16-bit, 16kHz or 8kHz mulaw for telephony compat)
+- Sentence chunking for streaming (split on `.!?` → synthesize each → stream)
+
+### 3. `src/stt-whisper.ts` — Local Whisper STT
+
+Implements `RealtimeSTTSession` interface:
+
+```typescript
+interface RealtimeSTTSession {
+  sendAudio(buffer: Buffer): void;
+  onTranscript(callback: (text: string) => void): void;
+  onPartialTranscript(callback: (text: string) => void): void;
+  onSpeechStart(callback: () => void): void;
+  close(): void;
+}
+```
+
+Our implementation:
+- Silero VAD (ONNX via `@pipecat-ai/silero-vad` or direct ONNX runtime)
+- Accumulate audio frames while VAD detects speech
+- On speech end → save to temp WAV → run Whisper CLI → return transcript
+- OR: use `whisper.cpp` WASM/native for faster inference
+- Fire `onSpeechStart` when VAD first detects voice
+
+## Config Extension
+
+Add to plugin config schema:
 ```json
-// Control messages (JSON, text frame)
-{"type": "connect", "token": "jwt...", "timezone": "Asia/Jerusalem"}
-{"type": "hangup"}
-
-// Audio data (binary frames)
-// Raw PCM 16-bit, 16kHz, mono
+{
+  "provider": "websocket",
+  "websocket": {
+    "port": "<your-port>",
+    "sslCert": "/path/to/cert",
+    "sslKey": "/path/to/key",
+    "jwtSecret": "<secret>"
+  },
+  "stt": {
+    "provider": "whisper",
+    "whisper": {
+      "model": "tiny",
+      "language": "en"
+    }
+  },
+  "tts": {
+    "provider": "edge",
+    "edge": {
+      "voice": "en-GB-RyanNeural"
+    }
+  }
+}
 ```
 
-### Server → Client
-```json
-// Control messages (JSON, text frame)
-{"type": "connected", "greeting": "afternoon"}
-{"type": "listening"}           // VAD detected speech start
-{"type": "processing"}          // VAD detected speech end, transcribing
-{"type": "transcript", "text": "..."} // What the user said
-{"type": "responding"}          // Jarvis is generating response
-{"type": "response_text", "text": "..."}  // Jarvis's text (for display)
-{"type": "done"}                // Response complete
-{"type": "error", "message": "..."}
+## Call Sounds
+Pre-generate with Edge TTS and store in `sounds/`:
+- `ring.wav` — 0.7s phone ring tone (synthesize or use free sound)
+- `pickup.wav` — pickup click
+- `greeting_morning.wav` — "Good morning, sir"
+- `greeting_afternoon.wav` — "Good afternoon, sir"
+- `greeting_evening.wav` — "Good evening, sir"
+- `greeting_night.wav` — "Good night, sir"
 
-// Audio data (binary frames)
-// Ring sound, pickup sound, greeting, TTS response audio
-// Same format: PCM 16-bit, 16kHz, mono
+## Dependencies (new, added to package.json)
+```
+edge-tts              # Free TTS (npm or Python subprocess)
+onnxruntime-node      # Silero VAD
+jsonwebtoken          # Device pairing auth
 ```
 
-## Environment Variables (.env)
-```
-# Server
-HOST=0.0.0.0
-PORT=<your-port>
-SSL_CERT=/path/to/your/cert.crt
-SSL_KEY=/path/to/your/key.key
+Whisper: use existing system `whisper` CLI or bundle `whisper.cpp` for speed.
 
-# OpenClaw
-OPENCLAW_HOST=<your-openclaw-host>
-OPENCLAW_PORT=<your-openclaw-port>
-OPENCLAW_TOKEN=<your-gateway-token>
-
-# Whisper
-WHISPER_MODEL=tiny
-
-# VAD
-VAD_STOP_SECS=0.6
-
-# Auth
-JWT_SECRET=<random-secret>
-```
-
-## File Structure
-```
-server/
-├── main.py              # Entry point, WebSocket server, SSL
-├── pipeline.py          # Pipecat pipeline assembly
-├── openclaw_llm.py      # Custom LLM service for OpenClaw
-├── auth.py              # Device pairing, JWT tokens
-├── db.py                # SQLite for paired devices + call logs
-├── sounds/              # Pre-generated audio files
-│   ├── ring.wav
-│   ├── pickup.wav
-│   └── greetings/
-│       ├── morning.wav
-│       ├── afternoon.wav
-│       ├── evening.wav
-│       └── night.wav
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
-## Dependencies
-```
-pipecat-ai[silero]    # Core + Silero VAD (~40MB total)
-aiohttp               # WebSocket server
-edge-tts              # Free TTS
-openai-whisper        # Local STT (already installed in voice-env)
-PyJWT                 # Token auth
-python-dotenv         # Env files
-```
+## Integration Points
+- Registers as provider "websocket" in `resolveProvider()` in runtime.ts
+- TTS adapter registered alongside existing OpenAI/ElevenLabs
+- STT adapter registered alongside existing OpenAI Realtime
+- All existing CLI commands work: `openclaw voicecall call/end/status`
+- Installs via `openclaw plugins install`
 
 ---
 
-*Port: Choose an available port and add to ari-apps.md and UFW*
+*Language: TypeScript (same as original plugin)*
+*Installs into: OpenClaw gateway process*

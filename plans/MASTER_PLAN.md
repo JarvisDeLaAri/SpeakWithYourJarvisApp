@@ -1,155 +1,148 @@
-# SpeakWithYourJarvisApp — Master Plan
+# SpeakWithYourJarvisApp — Master Plan (v2)
 
 ## Vision
-A real-time voice conversation app where you press "Call Jarvis", hear a phone ring, and talk naturally — like calling a friend. Available as Android app, web app, and backed by a Pipecat-powered server that routes through OpenClaw (real Jarvis, full memory + personality).
+A real-time voice conversation app where you press "Call Jarvis", hear a phone ring, and talk naturally. Built by **forking OpenClaw's voice-call plugin** and swapping paid components (Twilio, ElevenLabs, OpenAI STT) for free alternatives.
 
-## Architecture Overview
+## Key Insight
+OpenClaw already has a production voice-call plugin with call lifecycle, conversation state, interrupt detection, audio streaming, barge-in, and full agent integration. We don't build from zero — we swap 3 components:
+
+| Layer | OpenClaw Default (paid) | Our Swap (free) |
+|-------|------------------------|-----------------|
+| Telephony | Twilio / Telnyx / Plivo | WebSocket direct (no phone network) |
+| TTS | ElevenLabs / OpenAI | Edge TTS (en-GB-RyanNeural) |
+| STT | OpenAI Realtime API | Local Whisper (tiny/base) |
+
+## Architecture
 
 ```
-┌──────────────┐    ┌──────────────┐    ┌─────────────┐
-│  Android App │    │   Web App    │    │   (Future)   │
-│  (Kotlin)    │    │ (HTML/JS)    │    │  iOS App     │
-└──────┬───────┘    └──────┬───────┘    └──────────────┘
-       │                   │
-       │    WebSocket      │    WebSocket
-       └────────┬──────────┘
+┌──────────────┐    ┌──────────────┐
+│  Android App │    │   Web Client  │
+│  (Kotlin)    │    │ (HTML/JS)     │
+└──────┬───────┘    └──────┬────────┘
+       │    WebSocket (WSS) │
+       └────────┬───────────┘
                 ▼
-     ┌─────────────────────┐
-     │   Pipecat Server    │
-     │   (Python)          │
-     │                     │
-     │  ┌───────────────┐  │
-     │  │ Silero VAD    │  │  ← ML voice activity detection
-     │  │ (ONNX, 2MB)   │  │
-     │  └───────┬───────┘  │
-     │          ▼          │
-     │  ┌───────────────┐  │
-     │  │ Whisper STT   │  │  ← Speech to text (local, free)
-     │  │ (tiny/base)   │  │
-     │  └───────┬───────┘  │
-     │          ▼          │
-     │  ┌───────────────┐  │
-     │  │ OpenClaw API  │──┼──→ Main session (real Jarvis)
-     │  │ (Chat Compl.) │  │
-     │  └───────┬───────┘  │
-     │          ▼          │
-     │  ┌───────────────┐  │
-     │  │ Edge TTS      │  │  ← Text to speech (free, British Ryan)
-     │  │ (en-GB-Ryan)  │  │
-     │  └───────────────┘  │
-     └─────────────────────┘
+     ┌──────────────────────────┐
+     │  OpenClaw Gateway        │
+     │                          │
+     │  voice-call-free plugin  │  ← Our fork
+     │  ┌────────────────────┐  │
+     │  │ WebSocket Provider │  │  ← Replaces Twilio
+     │  │ (direct connect)   │  │
+     │  └────────┬───────────┘  │
+     │           ▼              │
+     │  ┌────────────────────┐  │
+     │  │ Whisper STT        │  │  ← Replaces OpenAI Realtime
+     │  │ (local, free)      │  │
+     │  └────────┬───────────┘  │
+     │           ▼              │
+     │  ┌────────────────────┐  │
+     │  │ Main Session (me!) │  │  ← Real Jarvis, full memory
+     │  └────────┬───────────┘  │
+     │           ▼              │
+     │  ┌────────────────────┐  │
+     │  │ Edge TTS           │  │  ← Replaces ElevenLabs
+     │  │ (British Ryan)     │  │
+     │  └────────────────────┘  │
+     └──────────────────────────┘
 ```
+
+## What We Keep From OpenClaw Voice-Call Plugin
+- ✅ Call Manager (lifecycle, state machine)
+- ✅ Media Stream Handler (bidirectional audio)
+- ✅ Conversation context management
+- ✅ Barge-in / interrupt detection
+- ✅ TTS queue & serialization
+- ✅ Agent integration (main session, tools, memory)
+- ✅ Plugin config system
+- ✅ CLI commands (`openclaw voicecall call/end/status`)
+
+## What We Build New (3 adapters)
+
+### 1. WebSocket Telephony Provider
+Replaces Twilio/Telnyx/Plivo. Instead of phone network:
+- Clients connect via WSS directly to the plugin's webhook server
+- Binary audio frames (PCM 16-bit, 16kHz mono) + JSON control messages
+- Device pairing with confirmation codes
+- Same interface as other providers (`VoiceCallProvider`)
+
+### 2. Edge TTS Adapter
+Replaces ElevenLabs/OpenAI TTS:
+- Uses `edge-tts` npm package or subprocess
+- Voice: en-GB-RyanNeural
+- Converts output to PCM for streaming
+- Same interface as `TelephonyTtsProvider`
+
+### 3. Local Whisper STT Adapter
+Replaces OpenAI Realtime API:
+- Uses Whisper (tiny/base) locally
+- VAD-based: accumulate speech frames → transcribe on speech end
+- Silero VAD (ONNX) for voice activity detection
+- Same interface as `RealtimeSTTSession`
 
 ## Project Structure
-
 ```
 SpeakWithYourJarvisApp/
-├── server/           # Pipecat voice server (Python)
-│   ├── main.py       # Server entry point
-│   ├── pipeline.py   # Pipecat pipeline config
-│   ├── openclaw.py   # OpenClaw LLM integration
-│   ├── auth.py       # Device pairing & confirmation codes
-│   ├── sounds/       # Ring tone, pickup sound, greetings
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── Dockerfile    # Optional containerization
+├── server/              # OpenClaw plugin fork
+│   ├── src/
+│   │   ├── providers/
+│   │   │   └── websocket.ts    # NEW: WebSocket telephony provider
+│   │   ├── stt-whisper.ts      # NEW: Local Whisper STT
+│   │   ├── tts-edge.ts         # NEW: Edge TTS adapter
+│   │   └── ...                 # Kept from voice-call plugin
+│   ├── sounds/                 # Ring, pickup, greetings
+│   ├── package.json
+│   └── .env.example
 │
-├── app/              # Android app (Kotlin)
-│   ├── (Android Studio project)
-│   ├── README.md     # Build & publish instructions
+├── app/                 # Android app (Kotlin)
 │   └── ...
 │
-├── web/              # Web client (HTML/CSS/JS)
-│   ├── index.html    # Single page app
+├── web/                 # Web client (HTML/CSS/JS)
+│   ├── index.html
 │   ├── style.css
-│   ├── app.js        # WebSocket + audio handling
-│   └── sounds/       # Client-side ring/pickup sounds
+│   └── app.js
 │
-├── plans/            # This folder
-│   ├── MASTER_PLAN.md
-│   ├── SERVER_PLAN.md
-│   ├── APP_PLAN.md
-│   ├── WEB_PLAN.md
-│   └── TASKS.md
-│
-├── .env.example      # Root env template
+├── plans/               # This folder
+├── .env.example
 ├── .gitignore
 └── README.md
 ```
 
-## Key Design Decisions
+## Call Experience (UX Flow)
+1. **Open app/web** → "Call Jarvis" button
+2. **Tap** → WebSocket connects to plugin
+3. **Ring** (0.7s) → **Pickup click** → **Greeting** ("Good afternoon, sir")
+4. **Talk naturally** — VAD handles turn detection, no 8-second cuts
+5. **Interrupt** — start talking while Jarvis speaks, he stops
+6. **Hang up** → tap red button or say "goodbye"
 
-### 1. Pipecat over LiveKit
-**Why:** Lighter (~40MB vs full media server), simpler pipeline model, easier OpenClaw integration, we're 1 user not a call center. Silero VAD (ONNX) fixes the 8-second cut problem without PyTorch (873MB).
-
-### 2. WebSocket transport (not WebRTC)
-**Why:** WebRTC requires STUN/TURN servers, ICE negotiation, complex NAT traversal. WebSocket over HTTPS is simpler, works through any firewall, and for 1-2 concurrent users the latency difference is negligible (~20ms). Our existing SSL cert works directly.
-
-### 3. Local Whisper STT (not Deepgram)
-**Why:** Free, no API key, no external dependency, no per-minute cost. We already use it. Tiny model is fast enough for real-time with VAD feeding clean audio segments.
-
-### 4. Edge TTS (not ElevenLabs)
-**Why:** Free, British Ryan voice already chosen, no API key. Good enough quality for conversation.
-
-### 5. OpenClaw Chat Completions API for LLM
-**Why:** Routes to main session = real Jarvis with full memory, personality, tools. Not a raw Claude API call with no context.
-
-### 6. Device pairing with confirmation code
-**Why:** Security. After app install, user enters server IP:port, server generates a 6-digit code, user confirms in app. Prevents random people from talking to your Jarvis. Paired devices get a persistent token stored locally.
-
-### 7. Kotlin for Android (not React Native/Flutter)
-**Why:** Native performance for audio handling, better microphone access, smaller APK, no JavaScript bridge latency for real-time audio. Ariel wants it on the Play Store — native is the right call.
-
-### 8. Web client as standalone HTML/CSS/JS
-**Why:** Consistent with our style (no frameworks). Works as fallback when you don't have the app. Same WebSocket protocol as the Android app.
-
-## The Call Experience (UX Flow)
-
-1. **Open app** → See "Call Jarvis" button (big, green, phone icon)
-2. **Tap "Call Jarvis"** → Connect WebSocket to server
-3. **Ring sound** plays (0.7s "tuuuu" tone) — feels like a real call
-4. **Pickup sound** plays (click/soft tone)
-5. **Jarvis greeting** plays: "Good morning/afternoon/evening/night, sir" (time-aware, pre-generated Edge TTS)
-6. **Conversation begins** — full duplex, streaming, with proper VAD
-7. **Hang up** → Tap red button or say "goodbye"
-
-## Cost Analysis
-
+## Cost
 | Component | Cost |
 |-----------|------|
-| Pipecat | Free (open source) |
-| Silero VAD | Free (ONNX) |
-| Whisper STT | Free (local) |
-| Edge TTS | Free |
-| OpenClaw/Claude | Already paying |
-| Android Dev Account | $25 one-time |
-| **Total ongoing** | **$0/month** |
+| Everything | **$0/month** |
+| Play Store (optional) | $25 one-time |
 
-## Google Play Store Requirements
+## Design Decisions
 
-- **Developer account**: $25 one-time fee, Google account required
-- **App signing**: Google Play App Signing (mandatory)
-- **Testing**: Personal accounts created after Nov 2023 need 12+ testers for 14+ days before public release
-- **Content rating**: IARC questionnaire
-- **Privacy policy**: Required (we handle voice data)
-- **Target API level**: Must target recent Android API level
-- **App bundle**: AAB format (not APK) for Play Store
+### Fork voice-call plugin, don't build from scratch
+**Why:** The plugin already solved all the hard problems (state machine, barge-in, audio queuing, agent integration). We just swap 3 I/O adapters. 10x less work, battle-tested foundation.
+
+### WebSocket over phone network
+**Why:** No Twilio account, no per-minute costs, no phone number needed. Works from any device with a browser or our app.
+
+### TypeScript (not Python/Pipecat)
+**Why:** The voice-call plugin is TypeScript. Forking it means we stay in the same language, same build system, same plugin architecture. It loads natively into OpenClaw.
+
+### Keep as OpenClaw plugin
+**Why:** Once built, it installs with `openclaw plugins install`. Anyone with OpenClaw can use it. No separate server process.
 
 ## Phases
-
-### Phase 1: Server (Pipecat pipeline)
-Get the voice pipeline working: WebSocket → VAD → STT → OpenClaw → TTS → back
-
-### Phase 2: Web Client
-HTML/JS client that connects to the server. Prove the pipeline works end-to-end.
-
-### Phase 3: Android App
-Native Kotlin app with the same WebSocket protocol. Polish UX (call sounds, greeting).
-
-### Phase 4: Play Store
-Set up developer account, testing track, publish.
+1. **Server**: Fork plugin, build 3 adapters, test end-to-end
+2. **Web**: HTML/JS client, prove pipeline works
+3. **Android**: Native Kotlin app
+4. **Publish**: APK sideload + optional Play Store
 
 ---
 
-*Created: 2026-02-12*
+*Created: 2026-02-12 (v2 — fork approach)*
 *Author: Jarvis de la Ari 🦞*
