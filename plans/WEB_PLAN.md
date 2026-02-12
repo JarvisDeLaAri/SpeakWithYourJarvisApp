@@ -1,7 +1,7 @@
 # Web Client Plan — Browser Voice Interface
 
 ## Overview
-Single-page web app (pure HTML/CSS/JS, no frameworks) that connects to the same Pipecat server. Acts as a fallback for when you don't have the Android app, and as a development/testing tool.
+Single-page web app (pure HTML/CSS/JS, no frameworks) that connects to the same voice server. Acts as a fallback for when you don't have the Android app, and as a development/testing tool.
 
 ## UX Flow
 1. Open the page (it's already hosted on your server — no setup needed)
@@ -73,4 +73,4 @@ web/
 
 ---
 
-*Will be served from the same Pipecat server on the same port (static files route)*
+*Will be served from the same voice server on the same port (static files route)*

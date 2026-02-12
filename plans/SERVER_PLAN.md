@@ -82,7 +82,7 @@ interface RealtimeSTTSession {
 ```
 
 Our implementation:
-- Silero VAD (ONNX via `@pipecat-ai/silero-vad` or direct ONNX runtime)
+- Silero VAD (ONNX via `onnxruntime-node` or direct ONNX runtime)
 - Accumulate audio frames while VAD detects speech
 - On speech end → save to temp WAV → run Whisper CLI → return transcript
 - OR: use `whisper.cpp` WASM/native for faster inference

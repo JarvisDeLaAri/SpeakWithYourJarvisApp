@@ -1,7 +1,7 @@
 # Android App Plan — SpeakWithYourJarvisApp
 
 ## Overview
-Native Android app (Kotlin) that connects to the Pipecat voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture, audio playback, and device pairing.
+Native Android app (Kotlin) that connects to the OpenClaw voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture, audio playback, and device pairing.
 
 ## UX Flow
 

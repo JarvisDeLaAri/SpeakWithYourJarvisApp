@@ -130,7 +130,7 @@ SpeakWithYourJarvisApp/
 ### WebSocket over phone network
 **Why:** No Twilio account, no per-minute costs, no phone number needed. Works from any device with a browser or our app.
 
-### TypeScript (not Python/Pipecat)
+### TypeScript (same as original plugin)
 **Why:** The voice-call plugin is TypeScript. Forking it means we stay in the same language, same build system, same plugin architecture. It loads natively into OpenClaw.
 
 ### Keep as OpenClaw plugin
