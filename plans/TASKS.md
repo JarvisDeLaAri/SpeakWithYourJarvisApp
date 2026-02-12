@@ -38,8 +38,8 @@
 
 ### 1.6 Pipecat Pipeline — LLM (OpenClaw)
 - [ ] Custom Pipecat LLM service class for OpenClaw Chat Completions API
-- [ ] POST to http://127.0.0.1:28789/v1/chat/completions
-- [ ] Include gateway token in Authorization header
+- [ ] POST to OpenClaw Chat Completions endpoint (configured via OPENCLAW_HOST and OPENCLAW_PORT env vars)
+- [ ] Include OPENCLAW_TOKEN from env in Authorization header
 - [ ] Maintain conversation history (last 10 turns per call)
 - [ ] Stream response for faster first-word
 - [ ] Send {"type": "response_text", "text": "..."} to client

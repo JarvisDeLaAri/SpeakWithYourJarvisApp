@@ -89,13 +89,13 @@ Python server using Pipecat framework to handle real-time voice conversations ov
 # Server
 HOST=0.0.0.0
 PORT=<your-port>
-SSL_CERT=/etc/ssl/apps/server.crt
-SSL_KEY=/etc/ssl/apps/server.key
+SSL_CERT=/path/to/your/cert.crt
+SSL_KEY=/path/to/your/key.key
 
 # OpenClaw
-OPENCLAW_HOST=127.0.0.1
-OPENCLAW_PORT=28789
-OPENCLAW_TOKEN=<gateway-token>
+OPENCLAW_HOST=<your-openclaw-host>
+OPENCLAW_PORT=<your-openclaw-port>
+OPENCLAW_TOKEN=<your-gateway-token>
 
 # Whisper
 WHISPER_MODEL=tiny

@@ -69,7 +69,7 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 │                         │
 │  Server Address:        │
 │  ┌───────────────────┐  │
-│  │ 192.168.1.100     │  │
+│  │ your-server-ip     │  │
 │  └───────────────────┘  │
 │  Port:                  │
 │  ┌───────────────────┐  │
