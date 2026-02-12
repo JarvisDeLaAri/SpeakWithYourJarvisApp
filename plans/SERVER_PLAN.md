@@ -88,7 +88,7 @@ Python server using Pipecat framework to handle real-time voice conversations ov
 ```
 # Server
 HOST=0.0.0.0
-PORT=10040
+PORT=<your-port>
 SSL_CERT=/etc/ssl/apps/server.crt
 SSL_KEY=/etc/ssl/apps/server.key
 
@@ -140,4 +140,4 @@ python-dotenv         # Env files
 
 ---
 
-*Port: 10040 (new, to be added to ari-apps.md and UFW)*
+*Port: Choose an available port and add to ari-apps.md and UFW*

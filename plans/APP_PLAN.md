@@ -73,7 +73,7 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 │  └───────────────────┘  │
 │  Port:                  │
 │  ┌───────────────────┐  │
-│  │ 10040             │  │
+│  │ <your-port>             │  │
 │  └───────────────────┘  │
 │                         │
 │  ┌───────────────────┐  │

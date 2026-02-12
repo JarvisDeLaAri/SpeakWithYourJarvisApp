@@ -33,7 +33,7 @@ python main.py
 ```
 
 ### Web Client
-Open `https://your-server:10040/` in a browser.
+Open `https://your-server:<your-port>/` in a browser.
 
 ### Android App
 Open `app/` in Android Studio, build, and install.
