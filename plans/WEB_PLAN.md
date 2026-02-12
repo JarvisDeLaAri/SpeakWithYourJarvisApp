@@ -1,15 +1,14 @@
 # Web Client Plan — Browser Voice Interface
 
 ## Overview
-Single-page web app (pure HTML/CSS/JS, no frameworks) that connects to the same voice server. Acts as a fallback for when you don't have the Android app, and as a development/testing tool.
+Single-page web app (pure HTML/CSS/JS, no frameworks) that connects to the same Pipecat server. Acts as a fallback for when you don't have the Android app, and as a development/testing tool.
 
 ## UX Flow
-1. Open the page (it's already hosted on your server — no setup needed)
+Same as Android app:
+1. First visit → setup: enter server address + port, pair with confirmation code
 2. Main screen → "Call Jarvis" button
 3. Ring → pickup → greeting → conversation
 4. Hang up button
-
-No pairing, no setup, no configuration. The web client is served from the same server it connects to.
 
 ## Technical Approach
 
@@ -29,9 +28,10 @@ No pairing, no setup, no configuration. The web client is served from the same s
 - WSS (secure) connection
 - Same protocol as Android app (binary audio + JSON control)
 
-### Connection
-- Connects to the same server that serves the page (no config needed)
-- No pairing — if you can reach the page, you can talk to Jarvis
+### Device Pairing
+- Server address + port stored in `localStorage`
+- JWT token stored in `localStorage` (acceptable for web)
+- Setup flow: fetch `/api/pair` → show code prompt → confirm → store token
 
 ### UI Design
 - Dark theme (consistent with our other apps)
@@ -73,4 +73,4 @@ web/
 
 ---
 
-*Will be served from the same voice server on the same port (static files route)*
+*Will be served from the same Pipecat server on the same port (static files route)*

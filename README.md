@@ -6,16 +6,16 @@ Real-time voice conversation with your AI assistant. Press "Call Jarvis", hear t
 
 ```
 📱 Android App ──┐
-                 ├── WebSocket (WSS) ──→ 🖥️ OpenClaw Voice Plugin ──→ 🤖 OpenClaw (Jarvis)
+                 ├── WebSocket (WSS) ──→ 🖥️ Pipecat Server ──→ 🤖 OpenClaw (Jarvis)
 🌐 Web Client ──┘                           │
-                                        VAD → Whisper STT → LLM → Edge TTS
+                                        Silero VAD → Whisper STT → LLM → Edge TTS
 ```
 
 ## Project Structure
 
 | Folder | Description |
 |--------|-------------|
-| `server/` | OpenClaw voice-call plugin fork (TypeScript) |
+| `server/` | Pipecat voice pipeline server (Python) |
 | `app/` | Android app (Kotlin) |
 | `web/` | Web client (HTML/CSS/JS) |
 | `plans/` | Architecture docs & task lists |
@@ -53,7 +53,7 @@ Open `app/` in Android Studio, build, and install.
 | Play Store | $25 one-time |
 
 ## Tech Stack
-- **Pipeline: OpenClaw voice-call plugin fork
+- **Pipeline**: Pipecat (open source)
 - **VAD**: Silero V5 (ONNX, ~2MB)
 - **STT**: Whisper (local, free)
 - **LLM**: OpenClaw → Claude (main session)

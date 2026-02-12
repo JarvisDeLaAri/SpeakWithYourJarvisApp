@@ -1,16 +1,18 @@
 # Android App Plan — SpeakWithYourJarvisApp
 
 ## Overview
-Native Android app (Kotlin) that connects to the OpenClaw voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture, audio playback, and device pairing.
+Native Android app (Kotlin) that connects to the Pipecat voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture, audio playback, and device pairing.
 
 ## UX Flow
 
 ### First Launch (Setup)
 1. Welcome screen: "Connect to Your Jarvis"
 2. Input fields: Server IP/hostname, Port
-3. Tap "Connect" → verifies server is reachable
-4. "Connected! ✅" → navigate to main screen
-5. Server address stored locally forever (SharedPreferences)
+3. Tap "Connect" → app sends pairing request
+4. Server generates 6-digit code → shows in Jarvis's WhatsApp
+5. App shows: "Enter the confirmation code Jarvis sent you"
+6. User enters code → app receives JWT token → stored securely
+7. "Connected! ✅" → navigate to main screen
 
 ### Main Screen
 1. Big green circle button: 📞 "Call Jarvis"
@@ -24,7 +26,8 @@ Native Android app (Kotlin) that connects to the OpenClaw voice server over WebS
 9. Red "Hang Up" button to end call
 
 ### Settings Screen
-- Server address (IP:port) — change if needed
+- Server address (IP:port)
+- Re-pair device
 - Audio settings (volume, etc.)
 - About
 
@@ -48,9 +51,9 @@ Native Android app (Kotlin) that connects to the OpenClaw voice server over WebS
 - Binary frames for audio, text frames for JSON control messages
 
 ### Security
+- JWT token stored in Android Keystore (encrypted)
 - Self-signed SSL cert: user accepts on first connect (TOFU model)
-- Server address stored in SharedPreferences
-- SSL protects the connection — if you know the IP:port, you're in
+- No credentials in app code — everything from pairing flow
 
 ### Permissions
 - `RECORD_AUDIO` — microphone access
@@ -79,7 +82,23 @@ Native Android app (Kotlin) that connects to the OpenClaw voice server over WebS
 └─────────────────────────┘
 ```
 
-### 2. Main Call Screen
+### 2. Confirmation Code Screen
+```
+┌─────────────────────────┐
+│                         │
+│  Jarvis sent you a code │
+│                         │
+│     ┌─┐┌─┐┌─┐┌─┐┌─┐┌─┐│
+│     │ ││ ││ ││ ││ ││ ││
+│     └─┘└─┘└─┘└─┘└─┘└─┘│
+│                         │
+│  ┌───────────────────┐  │
+│  │    Confirm        │  │
+│  └───────────────────┘  │
+└─────────────────────────┘
+```
+
+### 3. Main Call Screen
 ```
 ┌─────────────────────────┐
 │   🦞 Jarvis             │

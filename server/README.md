@@ -1,8 +1,6 @@
-# Server — OpenClaw Voice-Call Plugin Fork
+# Server — Pipecat Voice Pipeline
 
 See `../plans/SERVER_PLAN.md` for full architecture.
-
-Forked from OpenClaw voice-call extension. Swaps paid components (Twilio, ElevenLabs, OpenAI STT) for free alternatives (WebSocket, Edge TTS, Whisper).
 
 ## Setup
 ```bash
