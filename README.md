@@ -6,7 +6,7 @@ Real-time voice conversation with your AI assistant. Press "Call Jarvis", hear t
 
 ```
 📱 Android App ──┐
-                 ├── WebSocket (WSS) ──→ 🖥️ Pipecat Server ──→ 🤖 OpenClaw (Jarvis)
+                 ├── WebSocket (WSS) ──→ 🖥️ Voice Server ──→ 🤖 OpenClaw (Jarvis)
 🌐 Web Client ──┘                           │
                                         Silero VAD → Whisper STT → LLM → Edge TTS
 ```
@@ -15,7 +15,7 @@ Real-time voice conversation with your AI assistant. Press "Call Jarvis", hear t
 
 | Folder | Description |
 |--------|-------------|
-| `server/` | Pipecat voice pipeline server (Python) |
+| `server/` | Voice pipeline server (Python + Pipecat) |
 | `app/` | Android app (Kotlin) |
 | `web/` | Web client (HTML/CSS/JS) |
 | `plans/` | Architecture docs & task lists |

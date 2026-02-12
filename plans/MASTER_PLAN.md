@@ -6,17 +6,17 @@ A real-time voice conversation app where you press "Call Jarvis", hear a phone r
 ## Architecture Overview
 
 ```
-┌──────────────┐    ┌──────────────┐    ┌─────────────┐
-│  Android App │    │   Web App    │    │   (Future)   │
-│  (Kotlin)    │    │ (HTML/JS)    │    │  iOS App     │
-└──────┬───────┘    └──────┬───────┘    └──────────────┘
+┌──────────────┐    ┌──────────────┐
+│  Android App │    │   Web Client  │
+│  (Kotlin)    │    │ (HTML/JS)     │
+└──────┬───────┘    └──────┬────────┘
        │                   │
-       │    WebSocket      │    WebSocket
+       │    WebSocket (WSS) │
        └────────┬──────────┘
                 ▼
      ┌─────────────────────┐
-     │   Pipecat Server    │
-     │   (Python)          │
+     │  Pipecat Server     │
+     │  (Python)           │
      │                     │
      │  ┌───────────────┐  │
      │  │ Silero VAD    │  │  ← ML voice activity detection
@@ -48,7 +48,6 @@ SpeakWithYourJarvisApp/
 │   ├── main.py       # Server entry point
 │   ├── pipeline.py   # Pipecat pipeline config
 │   ├── openclaw.py   # OpenClaw LLM integration
-│   ├── auth.py       # Device pairing & confirmation codes
 │   ├── sounds/       # Ring tone, pickup sound, greetings
 │   ├── requirements.txt
 │   ├── .env.example
@@ -56,7 +55,7 @@ SpeakWithYourJarvisApp/
 │
 ├── app/              # Android app (Kotlin)
 │   ├── (Android Studio project)
-│   ├── README.md     # Build & publish instructions
+│   ├── README.md     # Build & install instructions
 │   └── ...
 │
 ├── web/              # Web client (HTML/CSS/JS)
@@ -66,12 +65,6 @@ SpeakWithYourJarvisApp/
 │   └── sounds/       # Client-side ring/pickup sounds
 │
 ├── plans/            # This folder
-│   ├── MASTER_PLAN.md
-│   ├── SERVER_PLAN.md
-│   ├── APP_PLAN.md
-│   ├── WEB_PLAN.md
-│   └── TASKS.md
-│
 ├── .env.example      # Root env template
 ├── .gitignore
 └── README.md
@@ -94,14 +87,26 @@ SpeakWithYourJarvisApp/
 ### 5. OpenClaw Chat Completions API for LLM
 **Why:** Routes to main session = real Jarvis with full memory, personality, tools. Not a raw Claude API call with no context.
 
-### 6. Device pairing with confirmation code
-**Why:** Security. After app install, user enters server IP:port, server generates a 6-digit code, user confirms in app. Prevents random people from talking to your Jarvis. Paired devices get a persistent token stored locally.
+### 6. No pairing / no setup for web
+**Why:** Web client is served from the same server. If you can reach the page, you can talk. SSL + firewall is enough security for personal use.
 
-### 7. Kotlin for Android (not React Native/Flutter)
-**Why:** Native performance for audio handling, better microphone access, smaller APK, no JavaScript bridge latency for real-time audio. Ariel wants it on the Play Store — native is the right call.
+### 7. Simple IP:port config for Android
+**Why:** Enter server address once, stored forever. No pairing ceremony, no confirmation codes. It's your personal Jarvis — keep it simple.
 
-### 8. Web client as standalone HTML/CSS/JS
+### 8. Kotlin for Android (not React Native/Flutter)
+**Why:** Native performance for audio handling, better microphone access, smaller APK, no JavaScript bridge latency for real-time audio.
+
+### 9. Web client as standalone HTML/CSS/JS
 **Why:** Consistent with our style (no frameworks). Works as fallback when you don't have the app. Same WebSocket protocol as the Android app.
+
+### 10. Call state machine (learned from OpenClaw voice-call plugin)
+**Why:** OpenClaw's voice-call plugin uses a strict state machine: `initiated → ringing → answered → active → speaking ⇄ listening → ended`. This prevents race conditions (e.g. sending audio while disconnecting). We adopt this pattern — simpler than OpenClaw's (no phone-network states) but same principle: enforce valid transitions, never process events in terminal states.
+
+### 11. Transcript logging per call
+**Why:** OpenClaw's plugin logs every transcript entry with timestamp + speaker. We do the same — call history stored in SQLite. Useful for debugging and review.
+
+### 12. Max duration timer
+**Why:** OpenClaw's plugin has a safety timer that auto-hangs up after N minutes. We add this too — prevents runaway calls (e.g. phone left on, background noise loop). Default 30 min.
 
 ## The Call Experience (UX Flow)
 
@@ -122,18 +127,7 @@ SpeakWithYourJarvisApp/
 | Whisper STT | Free (local) |
 | Edge TTS | Free |
 | OpenClaw/Claude | Already paying |
-| Android Dev Account | $25 one-time |
 | **Total ongoing** | **$0/month** |
-
-## Google Play Store Requirements
-
-- **Developer account**: $25 one-time fee, Google account required
-- **App signing**: Google Play App Signing (mandatory)
-- **Testing**: Personal accounts created after Nov 2023 need 12+ testers for 14+ days before public release
-- **Content rating**: IARC questionnaire
-- **Privacy policy**: Required (we handle voice data)
-- **Target API level**: Must target recent Android API level
-- **App bundle**: AAB format (not APK) for Play Store
 
 ## Phases
 
@@ -146,8 +140,8 @@ HTML/JS client that connects to the server. Prove the pipeline works end-to-end.
 ### Phase 3: Android App
 Native Kotlin app with the same WebSocket protocol. Polish UX (call sounds, greeting).
 
-### Phase 4: Play Store
-Set up developer account, testing track, publish.
+### Phase 4: Distribute
+Generate signed APK, host on server for direct download. Optional Play Store later.
 
 ---
 

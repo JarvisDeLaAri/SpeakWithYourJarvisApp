@@ -1,18 +1,16 @@
 # Android App Plan — SpeakWithYourJarvisApp
 
 ## Overview
-Native Android app (Kotlin) that connects to the Pipecat voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture, audio playback, and device pairing.
+Native Android app (Kotlin) that connects to the Pipecat voice server over WebSocket. Simple UI: one big "Call Jarvis" button. Handles microphone capture and audio playback natively for lowest latency.
 
 ## UX Flow
 
 ### First Launch (Setup)
 1. Welcome screen: "Connect to Your Jarvis"
 2. Input fields: Server IP/hostname, Port
-3. Tap "Connect" → app sends pairing request
-4. Server generates 6-digit code → shows in Jarvis's WhatsApp
-5. App shows: "Enter the confirmation code Jarvis sent you"
-6. User enters code → app receives JWT token → stored securely
-7. "Connected! ✅" → navigate to main screen
+3. Tap "Connect" → verifies server is reachable (/api/health)
+4. "Connected! ✅" → navigate to main screen
+5. Server address stored locally forever (SharedPreferences)
 
 ### Main Screen
 1. Big green circle button: 📞 "Call Jarvis"
@@ -23,11 +21,11 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 6. Status: "Connected — Speak now"
 7. Visual: pulsing animation when listening, different animation when Jarvis speaks
 8. Transcript area: shows what you said + what Jarvis said
-9. Red "Hang Up" button to end call
+9. Call duration timer
+10. Red "Hang Up" button to end call
 
 ### Settings Screen
-- Server address (IP:port)
-- Re-pair device
+- Server address (IP:port) — change if needed
 - Audio settings (volume, etc.)
 - About
 
@@ -46,14 +44,14 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 
 ### WebSocket
 - OkHttp WebSocket client (standard Android library)
-- HTTPS/WSS with self-signed cert support (trust custom CA)
+- HTTPS/WSS with self-signed cert support (trust custom CA on first connect)
 - Auto-reconnect on disconnect
 - Binary frames for audio, text frames for JSON control messages
 
 ### Security
-- JWT token stored in Android Keystore (encrypted)
-- Self-signed SSL cert: user accepts on first connect (TOFU model)
-- No credentials in app code — everything from pairing flow
+- Self-signed SSL cert: trust on first use (TOFU)
+- Server address stored in SharedPreferences
+- SSL protects the connection — if you know the IP:port, you're in
 
 ### Permissions
 - `RECORD_AUDIO` — microphone access
@@ -69,11 +67,11 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 │                         │
 │  Server Address:        │
 │  ┌───────────────────┐  │
-│  │ your-server-ip     │  │
+│  │ your-server-ip    │  │
 │  └───────────────────┘  │
 │  Port:                  │
 │  ┌───────────────────┐  │
-│  │ <your-port>             │  │
+│  │ <your-port>       │  │
 │  └───────────────────┘  │
 │                         │
 │  ┌───────────────────┐  │
@@ -82,26 +80,10 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 └─────────────────────────┘
 ```
 
-### 2. Confirmation Code Screen
+### 2. Main Call Screen
 ```
 ┌─────────────────────────┐
-│                         │
-│  Jarvis sent you a code │
-│                         │
-│     ┌─┐┌─┐┌─┐┌─┐┌─┐┌─┐│
-│     │ ││ ││ ││ ││ ││ ││
-│     └─┘└─┘└─┘└─┘└─┘└─┘│
-│                         │
-│  ┌───────────────────┐  │
-│  │    Confirm        │  │
-│  └───────────────────┘  │
-└─────────────────────────┘
-```
-
-### 3. Main Call Screen
-```
-┌─────────────────────────┐
-│   🦞 Jarvis             │
+│   🦞 Jarvis      02:34  │
 │                         │
 │        ┌─────┐          │
 │        │     │          │
@@ -110,7 +92,7 @@ Native Android app (Kotlin) that connects to the Pipecat voice server over WebSo
 │        └─────┘          │
 │    "Call Jarvis"        │
 │                         │
-│  ── Recent ──────────── │
+│  ── Transcript ──────── │
 │  You: "What's the..."  │
 │  Jarvis: "Good after.." │
 │                         │
@@ -130,15 +112,13 @@ app/
 │   │   │   ├── AudioCapture.kt      # Mic recording
 │   │   │   └── AudioPlayer.kt       # Playback
 │   │   ├── network/
-│   │   │   ├── WebSocketClient.kt   # WS connection
-│   │   │   └── PairingService.kt    # Device pairing
+│   │   │   └── WebSocketClient.kt   # WS connection
 │   │   └── storage/
-│   │       └── TokenStore.kt        # Secure JWT storage
+│   │       └── Preferences.kt       # SharedPreferences wrapper
 │   ├── res/
 │   │   ├── layout/
 │   │   │   ├── activity_setup.xml
-│   │   │   ├── activity_call.xml
-│   │   │   └── activity_confirm.xml
+│   │   │   └── activity_call.xml
 │   │   ├── raw/                     # Ring/pickup sounds
 │   │   └── values/
 │   └── AndroidManifest.xml
@@ -149,19 +129,12 @@ app/
 ## Dependencies (Gradle)
 ```kotlin
 implementation("com.squareup.okhttp3:okhttp:4.12.0")  // WebSocket
-implementation("androidx.security:security-crypto:1.1.0-alpha06")  // Keystore
 implementation("com.google.android.material:material:1.11.0")  // UI
 ```
 
-## Play Store Publishing Requirements
-1. Google Play Developer Account ($25 one-time)
-2. App signed with Play App Signing
-3. AAB format (Android App Bundle)
-4. Content rating (IARC)
-5. Privacy policy URL
-6. Testing: 12+ testers, 14+ days closed testing (personal accounts)
-7. Target API level: 34+ (Android 14)
-8. Minimum SDK: 26 (Android 8.0)
+## Distribution
+- **Primary**: Signed APK hosted on the server itself for direct download
+- **Optional**: Google Play Store ($25 one-time, 14-day testing requirement for personal accounts)
 
 ---
 
