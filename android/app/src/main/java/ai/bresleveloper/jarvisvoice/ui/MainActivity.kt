@@ -105,6 +105,8 @@ class MainActivity : AppCompatActivity() {
         audioCapture = AudioCapture(this).also { capture ->
             capture.onAudioData = { data ->
                 if (isInCall) {
+                    // Fix 3: Mute mic while bot is speaking
+                    capture.muteWhileSpeaking = audioPlayer?.isSpeaking == true
                     wsClient?.sendBinary(data)
                 }
             }

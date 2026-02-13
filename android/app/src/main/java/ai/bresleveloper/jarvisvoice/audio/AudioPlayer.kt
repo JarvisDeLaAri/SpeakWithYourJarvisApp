@@ -14,7 +14,11 @@ class AudioPlayer {
     private var audioTrack: AudioTrack? = null
     private val audioQueue = ConcurrentLinkedQueue<ByteArray>()
     private val isPlaying = AtomicBoolean(false)
+    private val _isSpeaking = AtomicBoolean(false)
     private var playThread: Thread? = null
+
+    /** True while TTS audio is actively being played */
+    val isSpeaking: Boolean get() = _isSpeaking.get()
 
     fun start() {
         val bufferSize = AudioTrack.getMinBufferSize(
@@ -26,7 +30,7 @@ class AudioPlayer {
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -48,8 +52,14 @@ class AudioPlayer {
             while (isPlaying.get()) {
                 val data = audioQueue.poll()
                 if (data != null) {
+                    _isSpeaking.set(true)
                     audioTrack?.write(data, 0, data.size)
+                    // If queue is empty after this chunk, we're done speaking
+                    if (audioQueue.isEmpty()) {
+                        _isSpeaking.set(false)
+                    }
                 } else {
+                    _isSpeaking.set(false)
                     Thread.sleep(10)
                 }
             }
@@ -61,10 +71,12 @@ class AudioPlayer {
 
     fun queueAudio(data: ByteArray) {
         audioQueue.add(data)
+        _isSpeaking.set(true)
     }
 
     fun stop() {
         isPlaying.set(false)
+        _isSpeaking.set(false)
         playThread?.join(1000)
         playThread = null
         audioQueue.clear()
@@ -75,5 +87,6 @@ class AudioPlayer {
 
     fun clearQueue() {
         audioQueue.clear()
+        _isSpeaking.set(false)
     }
 }
