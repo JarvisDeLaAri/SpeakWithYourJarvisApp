@@ -120,6 +120,8 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
         stop_secs=VAD_STOP_SECS,
     ))
+    # Must call set_sample_rate to initialize internal buffers
+    vad.set_sample_rate(SAMPLE_RATE)
 
     stt = WhisperSTTService(
         model=WHISPER_MODEL,
