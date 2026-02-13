@@ -81,22 +81,12 @@ GREETINGS = {
 async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     """Run the voice pipeline for a single call."""
     from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.audio.vad.vad_analyzer import VADParams, VADState
     from pipecat.services.whisper.stt import WhisperSTTService, Model
-    from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-    from pipecat.pipeline.pipeline import Pipeline
-    from pipecat.pipeline.runner import PipelineRunner
-    from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.frames.frames import (
-        InputAudioRawFrame,
-        OutputAudioRawFrame,
         TranscriptionFrame,
-        LLMFullResponseStartFrame,
-        LLMFullResponseEndFrame,
-        TextFrame,
         TTSAudioRawFrame,
-        EndFrame,
     )
-    from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 
     from edge_tts_service import EdgeTTSService
     from openclaw_llm import create_openclaw_llm
@@ -127,7 +117,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     await send_control(ws, {"type": "state", "state": "listening"})
 
     # ── Services ──
-    vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=SileroVADAnalyzer.VADParams(
+    vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
         stop_secs=VAD_STOP_SECS,
     ))
 
@@ -144,54 +134,10 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
         sample_rate=SAMPLE_RATE,
     )
 
-    # ── Custom processor: bridges WebSocket audio ↔ Pipecat frames ──
-    class WebSocketBridge(FrameProcessor):
-        """Bridges between WebSocket binary audio and Pipecat frame pipeline."""
-
-        def __init__(self, ws_conn: web.WebSocketResponse, call_mgr: CallManager):
-            super().__init__()
-            self._ws = ws_conn
-            self._call_mgr = call_mgr
-
-        async def process_frame(self, frame: Frame, direction: FrameDirection):
-            """Process outgoing frames → send to WebSocket."""
-            await super().process_frame(frame, direction)
-
-            if isinstance(frame, TTSAudioRawFrame):
-                # Send TTS audio to client
-                await send_audio(self._ws, frame.audio)
-            elif isinstance(frame, TranscriptionFrame):
-                # User said something
-                text = frame.text.strip()
-                if text:
-                    self._call_mgr.add_transcript("user", text)
-                    await send_control(self._ws, {
-                        "type": "transcript",
-                        "text": text,
-                    })
-                    self._call_mgr.transition(CallState.SPEAKING)
-                    await send_control(self._ws, {"type": "state", "state": "speaking"})
-            elif isinstance(frame, TextFrame):
-                # Jarvis response text
-                text = frame.text.strip()
-                if text:
-                    self._call_mgr.add_transcript("bot", text)
-                    await send_control(self._ws, {
-                        "type": "response_text",
-                        "text": text,
-                    })
-            elif isinstance(frame, LLMFullResponseEndFrame):
-                # Response complete, back to listening
-                self._call_mgr.transition(CallState.LISTENING)
-                await send_control(self._ws, {"type": "state", "state": "listening"})
-                await send_control(self._ws, {"type": "done"})
-
-            await self.push_frame(frame, direction)
-
-    bridge = WebSocketBridge(ws, call_manager)
-
     # ── Main loop: read audio from WebSocket, feed to VAD ──
     logger.info(f"Call {call.call_id}: pipeline started")
+    speech_buffer = bytearray()
+    is_speaking = False
 
     try:
         async for msg in ws:
@@ -201,21 +147,33 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                 # Feed to VAD
                 vad_state = vad.analyze_audio(audio_bytes)
 
-                if vad_state == "speaking":
-                    # Accumulate audio during speech
-                    if not hasattr(run_pipeline, '_speech_buffer'):
-                        run_pipeline._speech_buffer = bytearray()
-                    run_pipeline._speech_buffer.extend(audio_bytes)
-                elif vad_state == "stopped" and hasattr(run_pipeline, '_speech_buffer'):
-                    # Speech ended — transcribe
-                    speech_audio = bytes(run_pipeline._speech_buffer)
-                    run_pipeline._speech_buffer = bytearray()
+                if vad_state == VADState.STARTING:
+                    # Speech just started
+                    is_speaking = True
+                    speech_buffer = bytearray()
+                    speech_buffer.extend(audio_bytes)
+                    logger.debug(f"Call {call.call_id}: VAD speech start")
 
-                    if len(speech_audio) > SAMPLE_RATE:  # At least 0.5s of audio
+                elif vad_state == VADState.SPEAKING:
+                    # Speech continuing
+                    speech_buffer.extend(audio_bytes)
+
+                elif vad_state == VADState.STOPPING:
+                    # Speech ended — transcribe
+                    speech_buffer.extend(audio_bytes)
+                    is_speaking = False
+                    speech_audio = bytes(speech_buffer)
+                    speech_buffer = bytearray()
+
+                    # At least 0.5s of audio (16000 samples/sec * 2 bytes = 32000 bytes/sec)
+                    if len(speech_audio) > SAMPLE_RATE:
+                        logger.info(f"Call {call.call_id}: transcribing {len(speech_audio)} bytes")
+
                         # Run STT
                         async for frame in stt.run_stt(speech_audio):
                             if isinstance(frame, TranscriptionFrame) and frame.text.strip():
                                 user_text = frame.text.strip()
+                                logger.info(f"Call {call.call_id}: user said: {user_text}")
                                 call_manager.add_transcript("user", user_text)
                                 await send_control(ws, {
                                     "type": "transcript",
@@ -228,6 +186,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
                                 response_text = await get_llm_response(llm, user_text, call)
                                 if response_text:
+                                    logger.info(f"Call {call.call_id}: jarvis says: {response_text[:80]}")
                                     call_manager.add_transcript("bot", response_text)
                                     await send_control(ws, {
                                         "type": "response_text",
@@ -242,6 +201,10 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                 await send_control(ws, {"type": "done"})
                                 call_manager.transition(CallState.LISTENING)
                                 await send_control(ws, {"type": "state", "state": "listening"})
+                    else:
+                        logger.debug(f"Call {call.call_id}: speech too short ({len(speech_audio)} bytes), skipping")
+
+                # VADState.QUIET — no speech, do nothing
 
             elif msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
@@ -254,6 +217,8 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
     except Exception as e:
         logger.error(f"Call {call.call_id}: pipeline error: {e}")
+        import traceback
+        traceback.print_exc()
         call_manager.end_call(CallState.ERROR)
     else:
         call_manager.end_call(CallState.HANGUP_USER)
