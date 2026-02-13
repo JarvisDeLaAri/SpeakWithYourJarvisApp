@@ -42,6 +42,8 @@ class EdgeTTSService(TTSService):
         self._voice = voice
         self._rate = rate
         self._volume = volume
+        # Force sample rate (normally set by StartFrame in pipeline)
+        self._sample_rate = sample_rate
 
     def can_generate_metrics(self) -> bool:
         return True
@@ -77,18 +79,21 @@ class EdgeTTSService(TTSService):
             if pcm_data:
                 yield TTSStartedFrame()
                 # Send in chunks for streaming feel
-                chunk_size = self.sample_rate * 2  # 1 second chunks (16-bit = 2 bytes/sample)
+                chunk_size = max(1, self.sample_rate * 2)  # 1 second chunks (16-bit = 2 bytes/sample)
                 for i in range(0, len(pcm_data), chunk_size):
                     chunk = pcm_data[i:i + chunk_size]
-                    yield TTSAudioRawFrame(
-                        audio=chunk,
-                        sample_rate=self.sample_rate,
-                        num_channels=1,
-                    )
+                    if chunk:
+                        yield TTSAudioRawFrame(
+                            audio=chunk,
+                            sample_rate=self.sample_rate,
+                            num_channels=1,
+                        )
                 yield TTSStoppedFrame()
 
         except Exception as e:
             logger.error(f"Edge TTS error: {e}")
+            import traceback
+            traceback.print_exc()
             yield ErrorFrame(f"Edge TTS error: {e}")
         finally:
             await self.stop_processing_metrics()
