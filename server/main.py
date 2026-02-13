@@ -253,7 +253,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                 call_manager.add_transcript("bot", response_text)
 
                                 # If response is long, send full to WhatsApp and voice just a summary
-                                MAX_VOICE_CHARS = 200
+                                MAX_VOICE_CHARS = 255
                                 if len(response_text) > MAX_VOICE_CHARS:
                                     # Send full response to WhatsApp
                                     await send_to_whatsapp(response_text)
