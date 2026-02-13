@@ -43,7 +43,7 @@ Open `app/` in Android Studio, build, and install.
 - 🧠 Routes through OpenClaw main session (real Jarvis with full memory)
 - 🔇 Silero VAD filters background noise (no more AC-as-sentences)
 - 📞 Phone call UX: ring → pickup → greeting → conversation
-- 🔒 Device pairing with confirmation codes
+- 🔒 SSL encrypted, firewall secured
 - 🆓 Fully free: Whisper (local STT) + Edge TTS + open source pipeline
 
 ## Cost
