@@ -1,0 +1,4 @@
+pipecat-ai[silero,whisper,websocket]
+aiohttp
+edge-tts
+python-dotenv
