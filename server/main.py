@@ -110,7 +110,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
         call_manager.transition(CallState.SPEAKING)
         await send_control(ws, {"type": "state", "state": "speaking"})
         await send_audio(ws, greeting_audio)
-        call_manager.add_transcript("bot", f"Good {greeting_key}, sir.")
+        call_manager.add_transcript("bot", f"Good {greeting_key} sir.")
 
     call_manager.transition(CallState.LISTENING)
     await send_control(ws, {"type": "state", "state": "listening"})
