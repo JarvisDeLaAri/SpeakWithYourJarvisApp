@@ -299,10 +299,13 @@ function addTranscript(speaker, text, silence) {
         report.className = 'silence-report';
         const parts = [`⏱ ${silence.audioDuration}s`];
         if (silence.maxGap > 0) {
-            parts.push(`longest pause: ${silence.maxGap}s`);
+            parts.push(`longest mid-pause: ${silence.maxGap}s`);
             parts.push(`${silence.gapCount} pause${silence.gapCount !== 1 ? 's' : ''}`);
         } else {
-            parts.push('no pauses');
+            parts.push('no mid-pauses');
+        }
+        if (silence.finalSilence > 0) {
+            parts.push(`end silence: ${silence.finalSilence}s`);
         }
         report.textContent = parts.join(' · ');
         entry.appendChild(report);

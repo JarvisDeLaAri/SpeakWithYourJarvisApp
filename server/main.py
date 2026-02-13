@@ -192,13 +192,20 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                     speech_audio = bytes(speech_buffer)
                     speech_buffer = bytearray()
 
+                    # Record the final silence (the one that ended the utterance)
+                    final_silence = 0.0
+                    if silence_start_time is not None:
+                        final_silence = time.time() - silence_start_time
+
                     # Calculate silence stats
-                    max_gap = max(silence_gaps) if silence_gaps else 0.0
+                    mid_gaps = list(silence_gaps)  # pauses where speech resumed
+                    max_mid_gap = max(mid_gaps) if mid_gaps else 0.0
                     total_duration = len(speech_audio) / BYTES_PER_SEC
                     silence_report = {
-                        "maxGap": round(max_gap, 1),
-                        "gapCount": len(silence_gaps),
+                        "maxGap": round(max_mid_gap, 1),
+                        "gapCount": len(mid_gaps),
                         "audioDuration": round(total_duration, 1),
+                        "finalSilence": round(final_silence, 1),
                     }
                     silence_gaps = []
                     silence_start_time = None
