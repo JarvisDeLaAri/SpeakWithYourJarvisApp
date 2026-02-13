@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_dark">#FF0A0A0A</color>
+    <color name="surface_dark">#FF1A1A1A</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB0B0B0</color>
+
+    <color name="call_green">#FF4CAF50</color>
+    <color name="hangup_red">#FFF44336</color>
+
+    <color name="status_listening">#FF4CAF50</color>
+    <color name="status_transcribing">#FFFF9800</color>
+    <color name="status_thinking">#FF9C27B0</color>
+    <color name="status_speaking">#FF2196F3</color>
+
+    <color name="user_bubble">#FF1B5E20</color>
+    <color name="bot_bubble">#FF0D47A1</color>
+
+    <color name="silence_report">#FF888888</color>
+</resources>
