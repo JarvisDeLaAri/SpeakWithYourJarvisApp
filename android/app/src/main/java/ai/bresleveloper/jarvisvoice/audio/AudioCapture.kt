@@ -5,9 +5,6 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.NoiseSuppressor
-import android.util.Log
 import androidx.core.app.ActivityCompat
 import android.content.Context
 import java.nio.ByteBuffer
@@ -18,19 +15,16 @@ class AudioCapture(private val context: Context) {
         const val SAMPLE_RATE = 16000
         const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
-        private const val TAG = "AudioCapture"
     }
 
     private var audioRecord: AudioRecord? = null
     private var isRecording = false
     private var recordThread: Thread? = null
-    private var echoCanceler: AcousticEchoCanceler? = null
-    private var noiseSuppressor: NoiseSuppressor? = null
 
     var onAudioData: ((ByteArray) -> Unit)? = null
 
-    /** Set to true when bot is speaking to suppress mic data (Fix 3) */
-    var muteWhileSpeaking = false
+    /** When true, mic data is read but not forwarded */
+    var muted = false
 
     fun start(): Boolean {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -55,25 +49,6 @@ class AudioCapture(private val context: Context) {
             return false
         }
 
-        // Fix 2: Enable AcousticEchoCanceler
-        val sessionId = audioRecord!!.audioSessionId
-        if (AcousticEchoCanceler.isAvailable()) {
-            echoCanceler = AcousticEchoCanceler.create(sessionId)?.also {
-                it.enabled = true
-                Log.i(TAG, "AcousticEchoCanceler enabled")
-            }
-        } else {
-            Log.w(TAG, "AcousticEchoCanceler not available on this device")
-        }
-
-        // Bonus: enable noise suppressor too
-        if (NoiseSuppressor.isAvailable()) {
-            noiseSuppressor = NoiseSuppressor.create(sessionId)?.also {
-                it.enabled = true
-                Log.i(TAG, "NoiseSuppressor enabled")
-            }
-        }
-
         isRecording = true
         audioRecord?.startRecording()
 
@@ -81,10 +56,7 @@ class AudioCapture(private val context: Context) {
             val buffer = ShortArray(bufferSize / 2)
             while (isRecording) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
-                if (read > 0) {
-                    // Fix 3: Skip sending audio while bot is speaking
-                    if (muteWhileSpeaking) continue
-
+                if (read > 0 && !muted) {
                     val byteBuffer = ByteBuffer.allocate(read * 2)
                     byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
                     for (i in 0 until read) {
@@ -105,10 +77,6 @@ class AudioCapture(private val context: Context) {
         isRecording = false
         recordThread?.join(1000)
         recordThread = null
-        echoCanceler?.release()
-        echoCanceler = null
-        noiseSuppressor?.release()
-        noiseSuppressor = null
         audioRecord?.stop()
         audioRecord?.release()
         audioRecord = null

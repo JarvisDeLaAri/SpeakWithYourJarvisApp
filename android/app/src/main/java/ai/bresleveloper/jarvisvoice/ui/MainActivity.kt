@@ -1,11 +1,9 @@
 package ai.bresleveloper.jarvisvoice.ui
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -31,9 +29,6 @@ class MainActivity : AppCompatActivity() {
     private var wsClient: WebSocketClient? = null
     private var audioCapture: AudioCapture? = null
     private var audioPlayer: AudioPlayer? = null
-    private var audioManager: AudioManager? = null
-    private var previousAudioMode: Int = AudioManager.MODE_NORMAL
-    private var previousSpeakerphone: Boolean = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var isInCall = false
@@ -103,15 +98,6 @@ class MainActivity : AppCompatActivity() {
         updateCallButton(true)
         clearTranscript()
 
-        // Enable communication mode with speakerphone for AEC + loud output
-        audioManager = (getSystemService(Context.AUDIO_SERVICE) as AudioManager).also { am ->
-            previousAudioMode = am.mode
-            previousSpeakerphone = am.isSpeakerphoneOn
-            am.mode = AudioManager.MODE_IN_COMMUNICATION
-            @Suppress("DEPRECATION")
-            am.isSpeakerphoneOn = true
-        }
-
         // Start audio player
         audioPlayer = AudioPlayer().also { it.start() }
 
@@ -119,8 +105,8 @@ class MainActivity : AppCompatActivity() {
         audioCapture = AudioCapture(this).also { capture ->
             capture.onAudioData = { data ->
                 if (isInCall) {
-                    // Fix 3: Mute mic while bot is speaking
-                    capture.muteWhileSpeaking = audioPlayer?.isSpeaking == true
+                    // Mute mic while bot is speaking to prevent echo loop
+                    capture.muted = audioPlayer?.isSpeaking == true
                     wsClient?.sendBinary(data)
                 }
             }
@@ -222,14 +208,6 @@ class MainActivity : AppCompatActivity() {
         audioPlayer = null
         wsClient?.close()
         wsClient = null
-
-        // Restore audio mode
-        audioManager?.let { am ->
-            am.mode = previousAudioMode
-            @Suppress("DEPRECATION")
-            am.isSpeakerphoneOn = previousSpeakerphone
-        }
-        audioManager = null
 
         stopTimer()
         updateCallButton(false)

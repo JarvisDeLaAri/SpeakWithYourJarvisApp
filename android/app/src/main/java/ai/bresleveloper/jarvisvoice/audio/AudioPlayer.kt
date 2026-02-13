@@ -30,7 +30,7 @@ class AudioPlayer {
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -54,7 +54,6 @@ class AudioPlayer {
                 if (data != null) {
                     _isSpeaking.set(true)
                     audioTrack?.write(data, 0, data.size)
-                    // If queue is empty after this chunk, we're done speaking
                     if (audioQueue.isEmpty()) {
                         _isSpeaking.set(false)
                     }
