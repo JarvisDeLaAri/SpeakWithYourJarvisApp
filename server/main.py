@@ -228,17 +228,12 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
 
 async def get_llm_response(llm, user_text: str, call) -> str:
-    """Get a response from OpenClaw main session via WebSocket RPC chat.send.
+    """Get a response from OpenClaw main session via Chat Completions API.
 
-    Connects to the gateway WebSocket, authenticates, sends chat.send with
-    sessionKey "agent:main:main" to inject into the actual main session
-    (the same one connected to WhatsApp).
+    Uses X-OpenClaw-Session-Key header with the full session key "agent:main:main"
+    to inject into the actual main session (same as WhatsApp conversation).
     """
     import aiohttp
-    import uuid
-
-    gateway_ws_url = OPENCLAW_URL.replace("http://", "ws://").replace("https://", "wss://")
-    run_id = str(uuid.uuid4())
 
     prompt = (
         f"[🎤 Voice Call] The user is speaking through the voice call app. "
@@ -250,91 +245,35 @@ async def get_llm_response(llm, user_text: str, call) -> str:
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(gateway_ws_url) as ws:
-                # Send connect frame with auth
-                connect_frame = {
-                    "type": "req",
-                    "id": str(uuid.uuid4()),
-                    "method": "connect",
-                    "params": {
-                        "minProtocol": 1,
-                        "maxProtocol": 1,
-                        "client": {
-                            "id": "voice-call",
-                            "mode": "backend",
-                        },
-                        "auth": {
-                            "token": OPENCLAW_TOKEN,
-                        },
-                    },
-                }
-                await ws.send_json(connect_frame)
-
-                # Wait for connect response
-                connect_resp = await asyncio.wait_for(ws.receive_json(), timeout=5)
-                logger.debug(f"Gateway connect response: {connect_resp}")
-
-                # Send chat.send to main session
-                chat_frame = {
-                    "type": "req",
-                    "id": run_id,
-                    "method": "chat.send",
-                    "params": {
-                        "sessionKey": "agent:main:main",
-                        "message": prompt,
-                        "idempotencyKey": run_id,
-                    },
-                }
-                await ws.send_json(chat_frame)
-
-                # Collect response text from events
-                response_text = ""
-                timeout = 60  # seconds
-                start = time.time()
-
-                async for msg in ws:
-                    if time.time() - start > timeout:
-                        logger.warning("LLM response timeout")
-                        break
-
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        data = json.loads(msg.data)
-                        msg_type = data.get("type", "")
-
-                        # Look for response events
-                        if msg_type == "event" and data.get("event") == "chat.text":
-                            payload = data.get("payload", {})
-                            text = payload.get("text", "")
-                            if text:
-                                response_text += text
-
-                        # Look for run completion
-                        elif msg_type == "event" and data.get("event") == "chat.run.done":
-                            break
-
-                        # Also check for res (response to our request)
-                        elif msg_type == "res" and data.get("id") == run_id:
-                            # chat.send returns after queuing, actual text comes via events
-                            pass
-
-                    elif msg.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR):
-                        break
-
-                await ws.close()
-
-                if response_text:
-                    return response_text
+            async with session.post(
+                f"{OPENCLAW_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENCLAW_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-OpenClaw-Session-Key": "agent:main:main",
+                },
+                json={
+                    "model": "agent:main",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        }
+                    ],
+                },
+                ssl=False,
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    text = data["choices"][0]["message"]["content"]
+                    logger.debug(f"OpenClaw response: {text[:100]}")
+                    return text
                 else:
-                    logger.warning("No response text received from main session")
+                    error = await resp.text()
+                    logger.error(f"OpenClaw API error {resp.status}: {error[:300]}")
                     return "I'm sorry, I couldn't process that. Could you try again?"
-
-    except asyncio.TimeoutError:
-        logger.error("Gateway WebSocket timeout")
-        return "I'm having trouble connecting. Please try again."
     except Exception as e:
-        logger.error(f"Gateway RPC failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"OpenClaw request failed: {e}")
         return "I'm having trouble connecting. Please try again in a moment."
 
 
