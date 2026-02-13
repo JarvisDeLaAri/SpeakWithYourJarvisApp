@@ -23,9 +23,6 @@ class AudioCapture(private val context: Context) {
 
     var onAudioData: ((ByteArray) -> Unit)? = null
 
-    /** When true, mic data is read but not forwarded */
-    var muted = false
-
     fun start(): Boolean {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) {
@@ -56,7 +53,7 @@ class AudioCapture(private val context: Context) {
             val buffer = ShortArray(bufferSize / 2)
             while (isRecording) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
-                if (read > 0 && !muted) {
+                if (read > 0) {
                     val byteBuffer = ByteBuffer.allocate(read * 2)
                     byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
                     for (i in 0 until read) {

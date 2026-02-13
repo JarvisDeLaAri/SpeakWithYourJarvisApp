@@ -105,8 +105,6 @@ class MainActivity : AppCompatActivity() {
         audioCapture = AudioCapture(this).also { capture ->
             capture.onAudioData = { data ->
                 if (isInCall) {
-                    // Mute mic while bot is speaking to prevent echo loop
-                    capture.muted = audioPlayer?.isSpeaking == true
                     wsClient?.sendBinary(data)
                 }
             }
@@ -208,7 +206,6 @@ class MainActivity : AppCompatActivity() {
         audioPlayer = null
         wsClient?.close()
         wsClient = null
-
         stopTimer()
         updateCallButton(false)
         setStatus("Ready", R.color.text_secondary)
