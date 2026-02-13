@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         // Start audio capture
         audioCapture = AudioCapture(this).also { capture ->
             capture.onAudioData = { data ->
-                if (isInCall && !botIsSpeaking && audioPlayer?.isSpeaking != true) {
+                if (isInCall && !botIsSpeaking) {
                     wsClient?.sendBinary(data)
                 }
             }
