@@ -267,11 +267,15 @@ function updateCallButton(inCall) {
 }
 
 function updateButtonAnimation(state) {
-    callBtn.classList.remove('listening', 'speaking');
+    callBtn.classList.remove('listening', 'speaking', 'transcribing', 'thinking');
     if (state === 'listening') {
         callBtn.classList.add('listening');
     } else if (state === 'speaking') {
         callBtn.classList.add('speaking');
+    } else if (state === 'transcribing') {
+        callBtn.classList.add('transcribing');
+    } else if (state === 'thinking') {
+        callBtn.classList.add('thinking');
     }
 }
 

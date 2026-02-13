@@ -215,6 +215,9 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                         logger.info(f"Call {call.call_id}: transcribing {len(speech_audio)} bytes "
                                     f"(maxGap={silence_report['maxGap']}s, gaps={silence_report['gapCount']})")
 
+                        # Show transcribing status
+                        await send_control(ws, {"type": "state", "state": "transcribing"})
+
                         # Run STT
                         async for frame in stt.run_stt(speech_audio):
                             if isinstance(frame, TranscriptionFrame) and frame.text.strip():
@@ -227,9 +230,9 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                     "silence": silence_report,
                                 })
 
-                                # Get LLM response
+                                # Show thinking status while waiting for LLM
+                                await send_control(ws, {"type": "state", "state": "thinking"})
                                 call_manager.transition(CallState.SPEAKING)
-                                await send_control(ws, {"type": "state", "state": "speaking"})
 
                                 response_text = await get_llm_response(None, user_text, call)
                                 if response_text:
