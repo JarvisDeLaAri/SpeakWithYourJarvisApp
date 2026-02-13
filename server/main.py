@@ -225,11 +225,15 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                         await send_control(ws, {"type": "state", "state": "transcribing"})
 
                         # Run STT (direct faster-whisper with beam=1 for speed)
+                        stt_start = time.time()
                         audio_float = np.frombuffer(speech_audio, dtype=np.int16).astype(np.float32) / 32768.0
                         segments, _ = await asyncio.get_event_loop().run_in_executor(
                             None, lambda: _fast_whisper.transcribe(audio_float, beam_size=1, language="en")
                         )
                         user_text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.4).strip()
+                        stt_elapsed = time.time() - stt_start
+                        silence_report["sttTime"] = round(stt_elapsed, 1)
+                        logger.info(f"Call {call.call_id}: STT took {stt_elapsed:.1f}s")
                         if user_text:
                             logger.info(f"Call {call.call_id}: user said: {user_text}")
                             call_manager.add_transcript("user", user_text)

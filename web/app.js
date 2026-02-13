@@ -311,6 +311,9 @@ function addTranscript(speaker, text, silence) {
         if (silence.finalSilence > 0) {
             parts.push(`end silence: ${silence.finalSilence}s`);
         }
+        if (silence.sttTime !== undefined) {
+            parts.push(`transcribe: ${silence.sttTime}s`);
+        }
         report.textContent = parts.join(' · ');
         entry.appendChild(report);
     }
