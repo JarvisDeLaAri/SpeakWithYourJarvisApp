@@ -25,12 +25,16 @@ const vadSlider = document.getElementById('vadSlider');
 const vadValue = document.getElementById('vadValue');
 
 // ── VAD Slider ─────────────────────────────────────────────────
-vadSlider.addEventListener('input', () => {
-    vadValue.textContent = vadSlider.value;
+function sendVadUpdate() {
+    const val = parseFloat(vadSlider.value);
+    vadValue.textContent = val.toFixed(1);
+    console.log('[VAD] Slider:', val, 'ws:', ws ? ws.readyState : 'null');
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'vad_stop', value: parseFloat(vadSlider.value) }));
+        ws.send(JSON.stringify({ type: 'vad_stop', value: val }));
     }
-});
+}
+vadSlider.addEventListener('input', sendVadUpdate);
+vadSlider.addEventListener('change', sendVadUpdate);
 
 // ── Call Toggle ────────────────────────────────────────────────
 function toggleCall() {

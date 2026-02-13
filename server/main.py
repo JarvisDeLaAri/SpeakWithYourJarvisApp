@@ -248,6 +248,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
             elif msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
+                logger.debug(f"Call {call.call_id}: text msg: {data.get('type')}")
                 if data.get("type") == "hangup":
                     logger.info(f"Call {call.call_id}: user hangup")
                     break
