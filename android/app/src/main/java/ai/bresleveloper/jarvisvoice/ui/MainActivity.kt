@@ -32,7 +32,6 @@ class MainActivity : AppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isInCall = false
-    private var botIsSpeaking = false
     private var callStartTime = 0L
     private var timerRunnable: Runnable? = null
 
@@ -105,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         // Start audio capture
         audioCapture = AudioCapture(this).also { capture ->
             capture.onAudioData = { data ->
-                if (isInCall && !botIsSpeaking) {
+                if (isInCall && audioPlayer?.isActive != true) {
                     wsClient?.sendBinary(data)
                 }
             }
@@ -168,16 +167,10 @@ class MainActivity : AppCompatActivity() {
             "state" -> {
                 val state = json.optString("state")
                 when (state) {
-                    "listening" -> {
-                        botIsSpeaking = false
-                        setStatus("Listening", R.color.status_listening)
-                    }
+                    "listening" -> setStatus("Listening", R.color.status_listening)
                     "transcribing" -> setStatus("Transcribing", R.color.status_transcribing)
                     "thinking" -> setStatus("Thinking", R.color.status_thinking)
-                    "speaking" -> {
-                        botIsSpeaking = true
-                        setStatus("Speaking", R.color.status_speaking)
-                    }
+                    "speaking" -> setStatus("Speaking", R.color.status_speaking)
                     else -> setStatus(state.replaceFirstChar { it.uppercase() }, R.color.text_secondary)
                 }
             }
@@ -207,7 +200,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun endCall() {
         isInCall = false
-        botIsSpeaking = false
         audioCapture?.stop()
         audioCapture = null
         audioPlayer?.stop()
