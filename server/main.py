@@ -120,8 +120,9 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
     # ── Services (shared, pre-loaded at startup) ──
     # VAD is lightweight and stateful per-call, so create fresh
+    current_vad_stop = VAD_STOP_SECS
     vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
-        stop_secs=VAD_STOP_SECS,
+        stop_secs=current_vad_stop,
         start_secs=0.3,
         confidence=0.6,
         min_volume=0.4,
@@ -138,6 +139,14 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     speech_buffer = bytearray()
     is_speaking = False
 
+    # Silence gap tracking: record gaps between speech segments within one utterance
+    silence_start_time = None  # when current silence gap began
+    silence_gaps = []  # list of gap durations (seconds) within this utterance
+    prev_vad_state = VADState.QUIET
+
+    # Bytes per second for time calculations
+    BYTES_PER_SEC = SAMPLE_RATE * 2  # 16kHz * 16-bit = 32000 bytes/sec
+
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.BINARY:
@@ -146,11 +155,24 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                 # Feed to VAD
                 vad_state = await vad.analyze_audio(audio_bytes)
 
+                # Track silence gaps within speech
+                if prev_vad_state in (VADState.SPEAKING, VADState.STARTING) and vad_state == VADState.STOPPING:
+                    # Just went from speaking to silence — start timing the gap
+                    silence_start_time = time.time()
+                elif vad_state in (VADState.SPEAKING, VADState.STARTING) and silence_start_time is not None:
+                    # Resumed speaking after a gap — record the gap
+                    gap = time.time() - silence_start_time
+                    silence_gaps.append(gap)
+                    silence_start_time = None
+                prev_vad_state = vad_state
+
                 if vad_state == VADState.STARTING:
                     # Speech just started
                     if not is_speaking:
                         is_speaking = True
                         speech_buffer = bytearray()
+                        silence_gaps = []
+                        silence_start_time = None
                         logger.debug(f"Call {call.call_id}: VAD speech start")
                     speech_buffer.extend(audio_bytes)
 
@@ -170,9 +192,21 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                     speech_audio = bytes(speech_buffer)
                     speech_buffer = bytearray()
 
+                    # Calculate silence stats
+                    max_gap = max(silence_gaps) if silence_gaps else 0.0
+                    total_duration = len(speech_audio) / BYTES_PER_SEC
+                    silence_report = {
+                        "maxGap": round(max_gap, 1),
+                        "gapCount": len(silence_gaps),
+                        "audioDuration": round(total_duration, 1),
+                    }
+                    silence_gaps = []
+                    silence_start_time = None
+
                     # At least 0.5s of audio (16000 samples/sec * 2 bytes = 32000 bytes/sec)
                     if len(speech_audio) > SAMPLE_RATE:
-                        logger.info(f"Call {call.call_id}: transcribing {len(speech_audio)} bytes")
+                        logger.info(f"Call {call.call_id}: transcribing {len(speech_audio)} bytes "
+                                    f"(maxGap={silence_report['maxGap']}s, gaps={silence_report['gapCount']})")
 
                         # Run STT
                         async for frame in stt.run_stt(speech_audio):
@@ -183,6 +217,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                 await send_control(ws, {
                                     "type": "transcript",
                                     "text": user_text,
+                                    "silence": silence_report,
                                 })
 
                                 # Get LLM response
@@ -216,6 +251,20 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                 if data.get("type") == "hangup":
                     logger.info(f"Call {call.call_id}: user hangup")
                     break
+                elif data.get("type") == "vad_stop":
+                    # Client adjusting VAD silence threshold
+                    new_stop = float(data.get("value", current_vad_stop))
+                    new_stop = max(0.5, min(15.0, new_stop))  # clamp 0.5-15s
+                    current_vad_stop = new_stop
+                    vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
+                        stop_secs=current_vad_stop,
+                        start_secs=0.3,
+                        confidence=0.6,
+                        min_volume=0.4,
+                    ))
+                    vad.set_sample_rate(SAMPLE_RATE)
+                    logger.info(f"Call {call.call_id}: VAD stop updated to {current_vad_stop}s")
+                    await send_control(ws, {"type": "vad_updated", "value": current_vad_stop})
 
             elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
                 break

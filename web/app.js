@@ -21,6 +21,16 @@ const callBtn = document.getElementById('callBtn');
 const statusEl = document.getElementById('status');
 const timerEl = document.getElementById('timer');
 const transcriptEl = document.getElementById('transcript');
+const vadSlider = document.getElementById('vadSlider');
+const vadValue = document.getElementById('vadValue');
+
+// ── VAD Slider ─────────────────────────────────────────────────
+vadSlider.addEventListener('input', () => {
+    vadValue.textContent = vadSlider.value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'vad_stop', value: parseFloat(vadSlider.value) }));
+    }
+});
 
 // ── Call Toggle ────────────────────────────────────────────────
 function toggleCall() {
@@ -169,7 +179,7 @@ function handleControl(data) {
             break;
 
         case 'transcript':
-            addTranscript('user', data.text);
+            addTranscript('user', data.text, data.silence);
             break;
 
         case 'response_text':
@@ -261,7 +271,7 @@ function updateButtonAnimation(state) {
     }
 }
 
-function addTranscript(speaker, text) {
+function addTranscript(speaker, text, silence) {
     // Remove placeholder
     const placeholder = transcriptEl.querySelector('.transcript-placeholder');
     if (placeholder) placeholder.remove();
@@ -278,6 +288,22 @@ function addTranscript(speaker, text) {
 
     entry.appendChild(label);
     entry.appendChild(content);
+
+    // Show silence report for user messages
+    if (silence && speaker === 'user') {
+        const report = document.createElement('div');
+        report.className = 'silence-report';
+        const parts = [`⏱ ${silence.audioDuration}s`];
+        if (silence.maxGap > 0) {
+            parts.push(`longest pause: ${silence.maxGap}s`);
+            parts.push(`${silence.gapCount} pause${silence.gapCount !== 1 ? 's' : ''}`);
+        } else {
+            parts.push('no pauses');
+        }
+        report.textContent = parts.join(' · ');
+        entry.appendChild(report);
+    }
+
     transcriptEl.appendChild(entry);
 
     // Auto-scroll
