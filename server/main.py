@@ -238,13 +238,26 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                 if response_text:
                                     logger.info(f"Call {call.call_id}: jarvis says: {response_text[:80]}")
                                     call_manager.add_transcript("bot", response_text)
+
+                                    # If response is long, send full to WhatsApp and voice just a summary
+                                    MAX_VOICE_CHARS = 200
+                                    if len(response_text) > MAX_VOICE_CHARS:
+                                        # Send full response to WhatsApp
+                                        await send_to_whatsapp(response_text)
+                                        # Get first sentence for voice
+                                        first_sentence = response_text.split('.')[0].strip() + '.'
+                                        voice_text = first_sentence + " Sent the details to WhatsApp."
+                                        logger.info(f"Call {call.call_id}: long response ({len(response_text)} chars), sent to WA")
+                                    else:
+                                        voice_text = response_text
+
                                     await send_control(ws, {
                                         "type": "response_text",
-                                        "text": response_text,
+                                        "text": voice_text,
                                     })
 
                                     # TTS → send audio
-                                    async for tts_frame in tts.run_tts(response_text, "ctx"):
+                                    async for tts_frame in tts.run_tts(voice_text, "ctx"):
                                         if isinstance(tts_frame, TTSAudioRawFrame):
                                             await send_audio(ws, tts_frame.audio)
 
@@ -346,6 +359,44 @@ async def get_llm_response(llm, user_text: str, call) -> str:
     except Exception as e:
         logger.error(f"OpenClaw request failed: {e}")
         return "I'm having trouble connecting. Please try again in a moment."
+
+
+# ── WhatsApp Helper ────────────────────────────────────────────
+async def send_to_whatsapp(text: str):
+    """Send a message to WhatsApp via OpenClaw Chat Completions.
+    Uses a simple instruction to forward the text.
+    """
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{OPENCLAW_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENCLAW_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-OpenClaw-Session-Key": "agent:main:main",
+                },
+                json={
+                    "model": "agent:main",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                f"[🎤 Voice Call — WhatsApp Forward] "
+                                f"Send the following text to WhatsApp using the message tool, "
+                                f"then reply with ONLY: NO_REPLY\n\n"
+                                f"Text to send:\n{text}"
+                            ),
+                        }
+                    ],
+                },
+                ssl=False,
+            ) as resp:
+                if resp.status != 200:
+                    error = await resp.text()
+                    logger.error(f"WhatsApp forward failed: {resp.status}: {error[:200]}")
+    except Exception as e:
+        logger.error(f"WhatsApp forward error: {e}")
 
 
 # ── WebSocket Helpers ──────────────────────────────────────────
