@@ -15,6 +15,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 from loguru import logger
 
+import numpy as np
 from call_state import CallManager, CallState
 
 load_dotenv()
@@ -45,6 +46,11 @@ from pipecat.frames.frames import TranscriptionFrame, TTSAudioRawFrame
 from edge_tts_service import EdgeTTSService
 
 _shared_stt = WhisperSTTService(model=WHISPER_MODEL, device="cpu", compute_type="int8", no_speech_prob=0.4)
+
+# Direct faster-whisper model for fast transcription (beam_size=1)
+from faster_whisper import WhisperModel as _FWModel
+_fast_whisper = _FWModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+logger.info("Fast Whisper (beam=1) loaded ✓")
 _shared_tts = EdgeTTSService(voice="en-GB-RyanNeural", sample_rate=SAMPLE_RATE)
 logger.info("Models pre-loaded ✓")
 
@@ -218,52 +224,55 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                         # Show transcribing status
                         await send_control(ws, {"type": "state", "state": "transcribing"})
 
-                        # Run STT
-                        async for frame in stt.run_stt(speech_audio):
-                            if isinstance(frame, TranscriptionFrame) and frame.text.strip():
-                                user_text = frame.text.strip()
-                                logger.info(f"Call {call.call_id}: user said: {user_text}")
-                                call_manager.add_transcript("user", user_text)
+                        # Run STT (direct faster-whisper with beam=1 for speed)
+                        audio_float = np.frombuffer(speech_audio, dtype=np.int16).astype(np.float32) / 32768.0
+                        segments, _ = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: _fast_whisper.transcribe(audio_float, beam_size=1, language="en")
+                        )
+                        user_text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.4).strip()
+                        if user_text:
+                            logger.info(f"Call {call.call_id}: user said: {user_text}")
+                            call_manager.add_transcript("user", user_text)
+                            await send_control(ws, {
+                                "type": "transcript",
+                                "text": user_text,
+                                "silence": silence_report,
+                            })
+
+                            # Show thinking status while waiting for LLM
+                            await send_control(ws, {"type": "state", "state": "thinking"})
+                            call_manager.transition(CallState.SPEAKING)
+
+                            response_text = await get_llm_response(None, user_text, call)
+                            if response_text:
+                                logger.info(f"Call {call.call_id}: jarvis says: {response_text[:80]}")
+                                call_manager.add_transcript("bot", response_text)
+
+                                # If response is long, send full to WhatsApp and voice just a summary
+                                MAX_VOICE_CHARS = 200
+                                if len(response_text) > MAX_VOICE_CHARS:
+                                    # Send full response to WhatsApp
+                                    await send_to_whatsapp(response_text)
+                                    # Get first sentence for voice
+                                    first_sentence = response_text.split('.')[0].strip() + '.'
+                                    voice_text = first_sentence + " Sent the details to WhatsApp."
+                                    logger.info(f"Call {call.call_id}: long response ({len(response_text)} chars), sent to WA")
+                                else:
+                                    voice_text = response_text
+
                                 await send_control(ws, {
-                                    "type": "transcript",
-                                    "text": user_text,
-                                    "silence": silence_report,
+                                    "type": "response_text",
+                                    "text": voice_text,
                                 })
 
-                                # Show thinking status while waiting for LLM
-                                await send_control(ws, {"type": "state", "state": "thinking"})
-                                call_manager.transition(CallState.SPEAKING)
+                                # TTS → send audio
+                                async for tts_frame in tts.run_tts(voice_text, "ctx"):
+                                    if isinstance(tts_frame, TTSAudioRawFrame):
+                                        await send_audio(ws, tts_frame.audio)
 
-                                response_text = await get_llm_response(None, user_text, call)
-                                if response_text:
-                                    logger.info(f"Call {call.call_id}: jarvis says: {response_text[:80]}")
-                                    call_manager.add_transcript("bot", response_text)
-
-                                    # If response is long, send full to WhatsApp and voice just a summary
-                                    MAX_VOICE_CHARS = 200
-                                    if len(response_text) > MAX_VOICE_CHARS:
-                                        # Send full response to WhatsApp
-                                        await send_to_whatsapp(response_text)
-                                        # Get first sentence for voice
-                                        first_sentence = response_text.split('.')[0].strip() + '.'
-                                        voice_text = first_sentence + " Sent the details to WhatsApp."
-                                        logger.info(f"Call {call.call_id}: long response ({len(response_text)} chars), sent to WA")
-                                    else:
-                                        voice_text = response_text
-
-                                    await send_control(ws, {
-                                        "type": "response_text",
-                                        "text": voice_text,
-                                    })
-
-                                    # TTS → send audio
-                                    async for tts_frame in tts.run_tts(voice_text, "ctx"):
-                                        if isinstance(tts_frame, TTSAudioRawFrame):
-                                            await send_audio(ws, tts_frame.audio)
-
-                                await send_control(ws, {"type": "done"})
-                                call_manager.transition(CallState.LISTENING)
-                                await send_control(ws, {"type": "state", "state": "listening"})
+                            await send_control(ws, {"type": "done"})
+                            call_manager.transition(CallState.LISTENING)
+                            await send_control(ws, {"type": "state", "state": "listening"})
                     else:
                         logger.debug(f"Call {call.call_id}: speech too short ({len(speech_audio)} bytes), skipping")
 
