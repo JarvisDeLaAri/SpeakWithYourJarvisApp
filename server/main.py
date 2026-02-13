@@ -122,8 +122,12 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     # VAD is lightweight and stateful per-call, so create fresh
     vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
         stop_secs=VAD_STOP_SECS,
+        start_secs=0.3,
+        confidence=0.6,
+        min_volume=0.4,
     ))
     vad.set_sample_rate(SAMPLE_RATE)
+    logger.info(f"Call {call.call_id}: VAD params: stop={vad.params.stop_secs}s start={vad.params.start_secs}s conf={vad.params.confidence}")
 
     # STT and TTS are shared (models loaded once)
     stt = _shared_stt
@@ -144,17 +148,23 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
                 if vad_state == VADState.STARTING:
                     # Speech just started
-                    is_speaking = True
-                    speech_buffer = bytearray()
+                    if not is_speaking:
+                        is_speaking = True
+                        speech_buffer = bytearray()
+                        logger.debug(f"Call {call.call_id}: VAD speech start")
                     speech_buffer.extend(audio_bytes)
-                    logger.debug(f"Call {call.call_id}: VAD speech start")
 
                 elif vad_state == VADState.SPEAKING:
                     # Speech continuing
+                    is_speaking = True
                     speech_buffer.extend(audio_bytes)
 
                 elif vad_state == VADState.STOPPING:
-                    # Speech ended — transcribe
+                    # Still counting silence — keep buffering but don't transcribe yet
+                    speech_buffer.extend(audio_bytes)
+
+                elif vad_state == VADState.QUIET and is_speaking:
+                    # Full stop_secs of silence elapsed — NOW transcribe
                     speech_buffer.extend(audio_bytes)
                     is_speaking = False
                     speech_audio = bytes(speech_buffer)
