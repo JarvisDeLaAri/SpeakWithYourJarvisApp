@@ -293,9 +293,14 @@ async def get_llm_response(llm, user_text: str, call) -> str:
 
     prompt = (
         f"[🎤 Voice Call] The user is speaking through the voice call app. "
-        f"Respond concisely (1-3 sentences) — this will be converted to speech. "
-        f"Do NOT use the tts tool. Do NOT include MEDIA: tags. "
-        f"Just reply with plain text.\n\n"
+        f"Your response will be converted to speech via TTS.\n\n"
+        f"RULES:\n"
+        f"- Keep voice responses SHORT (1-3 sentences max)\n"
+        f"- Do NOT use the tts tool. Do NOT include MEDIA: tags\n"
+        f"- If the answer requires detail (code, lists, steps, long explanations): "
+        f"send a BRIEF voice summary, then use the message tool to send the full details "
+        f"to WhatsApp, and end your voice response with 'sent the details to WhatsApp'\n"
+        f"- If the answer is simple, just reply with plain text\n\n"
         f'They said: "{user_text}"'
     )
 
