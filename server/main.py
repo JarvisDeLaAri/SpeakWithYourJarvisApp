@@ -36,6 +36,18 @@ SAMPLE_RATE = 16000
 # ── Call Manager ────────────────────────────────────────────────
 call_manager = CallManager(max_duration_min=MAX_CALL_DURATION_MIN)
 
+# ── Pre-load Models (once at startup, not per-call) ────────────
+logger.info("Pre-loading Pipecat models...")
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams, VADState
+from pipecat.services.whisper.stt import WhisperSTTService, Model
+from pipecat.frames.frames import TranscriptionFrame, TTSAudioRawFrame
+from edge_tts_service import EdgeTTSService
+
+_shared_stt = WhisperSTTService(model=WHISPER_MODEL, device="cpu", no_speech_prob=0.4)
+_shared_tts = EdgeTTSService(voice="en-GB-RyanNeural", sample_rate=SAMPLE_RATE)
+logger.info("Models pre-loaded ✓")
+
 
 def get_greeting_key(timezone: str = "UTC") -> str:
     """Determine time-appropriate greeting based on timezone."""
@@ -80,15 +92,6 @@ GREETINGS = {
 # ── Pipecat Pipeline ───────────────────────────────────────────
 async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     """Run the voice pipeline for a single call."""
-    from pipecat.audio.vad.silero import SileroVADAnalyzer
-    from pipecat.audio.vad.vad_analyzer import VADParams, VADState
-    from pipecat.services.whisper.stt import WhisperSTTService, Model
-    from pipecat.frames.frames import (
-        TranscriptionFrame,
-        TTSAudioRawFrame,
-    )
-
-    from edge_tts_service import EdgeTTSService
 
     # ── Start call ──
     call = call_manager.start_call()
@@ -115,23 +118,16 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     call_manager.transition(CallState.LISTENING)
     await send_control(ws, {"type": "state", "state": "listening"})
 
-    # ── Services ──
+    # ── Services (shared, pre-loaded at startup) ──
+    # VAD is lightweight and stateful per-call, so create fresh
     vad = SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VADParams(
         stop_secs=VAD_STOP_SECS,
     ))
-    # Must call set_sample_rate to initialize internal buffers
     vad.set_sample_rate(SAMPLE_RATE)
 
-    stt = WhisperSTTService(
-        model=WHISPER_MODEL,
-        device="cpu",
-        no_speech_prob=0.4,
-    )
-
-    tts = EdgeTTSService(
-        voice="en-GB-RyanNeural",
-        sample_rate=SAMPLE_RATE,
-    )
+    # STT and TTS are shared (models loaded once)
+    stt = _shared_stt
+    tts = _shared_tts
 
     # ── Main loop: read audio from WebSocket, feed to VAD ──
     logger.info(f"Call {call.call_id}: pipeline started")
@@ -310,10 +306,9 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
         pass
 
     # Send connected acknowledgment
-    call = call_manager.start_call()
     await send_control(ws, {
         "type": "connected",
-        "callId": call.call_id,
+        "callId": "pending",
         "greeting": get_greeting_key(timezone),
     })
 
