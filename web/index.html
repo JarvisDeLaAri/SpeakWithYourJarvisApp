@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦞 Jarvis Voice</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🦞 Jarvis</h1>
+            <span id="timer" class="timer">00:00</span>
+        </header>
+
+        <div class="call-area">
+            <div id="status" class="status">Ready</div>
+            <button id="callBtn" class="call-btn call" onclick="toggleCall()">
+                <span class="icon">📞</span>
+                <span class="label">Call Jarvis</span>
+            </button>
+        </div>
+
+        <div id="transcript" class="transcript">
+            <div class="transcript-placeholder">Transcript will appear here...</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-height: 700px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+}
+
+header h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.timer {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 18px;
+    color: #666;
+}
+
+.timer.active {
+    color: #4ade80;
+}
+
+.call-area {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 0;
+}
+
+.status {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 24px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.status.listening {
+    color: #4ade80;
+}
+
+.status.speaking {
+    color: #60a5fa;
+}
+
+.status.connecting, .status.ringing {
+    color: #fbbf24;
+}
+
+.call-btn {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.call-btn.call {
+    background: #22c55e;
+    color: white;
+}
+
+.call-btn.call:hover {
+    background: #16a34a;
+    transform: scale(1.05);
+}
+
+.call-btn.hangup {
+    background: #ef4444;
+    color: white;
+}
+
+.call-btn.hangup:hover {
+    background: #dc2626;
+}
+
+.call-btn .icon {
+    font-size: 28px;
+}
+
+.call-btn .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Pulse animation for listening */
+.call-btn.listening {
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+    70% { box-shadow: 0 0 0 20px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* Wave animation for speaking */
+.call-btn.speaking {
+    animation: pulse-blue 1.5s infinite;
+}
+
+@keyframes pulse-blue {
+    0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
+    70% { box-shadow: 0 0 0 20px rgba(96, 165, 250, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0); }
+}
+
+.transcript {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.transcript-placeholder {
+    color: #444;
+    text-align: center;
+    padding: 40px 0;
+    font-style: italic;
+}
+
+.transcript-entry {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+    max-width: 85%;
+}
+
+.transcript-entry.user {
+    background: #1a3a1a;
+    color: #4ade80;
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+}
+
+.transcript-entry.bot {
+    background: #1a2a3a;
+    color: #60a5fa;
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+}
+
+.transcript-entry .speaker {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 2px;
+}
+
+/* Scrollbar */
+.transcript::-webkit-scrollbar {
+    width: 4px;
+}
+
+.transcript::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 2px;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+        max-height: none;
+        height: 100vh;
+    }
+
+    .call-area {
+        padding: 30px 0;
+    }
+}
