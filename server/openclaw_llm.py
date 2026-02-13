@@ -12,7 +12,7 @@ def create_openclaw_llm(openclaw_url: str, openclaw_token: str) -> OpenAILLMServ
     """Create an OpenAI-compatible LLM service pointing at OpenClaw gateway.
 
     Args:
-        openclaw_url: Full URL to OpenClaw gateway (e.g. http://127.0.0.1:28789)
+        openclaw_url: Full URL to OpenClaw gateway (e.g. http://127.0.0.1:<port>)
         openclaw_token: Gateway authentication token
 
     Returns:
