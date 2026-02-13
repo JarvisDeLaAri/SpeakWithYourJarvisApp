@@ -44,7 +44,7 @@ from pipecat.services.whisper.stt import WhisperSTTService, Model
 from pipecat.frames.frames import TranscriptionFrame, TTSAudioRawFrame
 from edge_tts_service import EdgeTTSService
 
-_shared_stt = WhisperSTTService(model=WHISPER_MODEL, device="cpu", no_speech_prob=0.4)
+_shared_stt = WhisperSTTService(model=WHISPER_MODEL, device="cpu", compute_type="int8", no_speech_prob=0.4)
 _shared_tts = EdgeTTSService(voice="en-GB-RyanNeural", sample_rate=SAMPLE_RATE)
 logger.info("Models pre-loaded ✓")
 
