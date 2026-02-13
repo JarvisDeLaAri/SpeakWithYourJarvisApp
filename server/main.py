@@ -145,7 +145,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                 # Audio from client
                 audio_bytes = msg.data
                 # Feed to VAD
-                vad_state = vad.analyze_audio(audio_bytes)
+                vad_state = await vad.analyze_audio(audio_bytes)
 
                 if vad_state == VADState.STARTING:
                     # Speech just started
