@@ -89,7 +89,6 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
     )
 
     from edge_tts_service import EdgeTTSService
-    from openclaw_llm import create_openclaw_llm
 
     # ── Start call ──
     call = call_manager.start_call()
@@ -128,8 +127,6 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
         device="cpu",
         no_speech_prob=0.4,
     )
-
-    llm = create_openclaw_llm(OPENCLAW_URL, OPENCLAW_TOKEN)
 
     tts = EdgeTTSService(
         voice="en-GB-RyanNeural",
@@ -186,7 +183,7 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
                                 call_manager.transition(CallState.SPEAKING)
                                 await send_control(ws, {"type": "state", "state": "speaking"})
 
-                                response_text = await get_llm_response(llm, user_text, call)
+                                response_text = await get_llm_response(None, user_text, call)
                                 if response_text:
                                     logger.info(f"Call {call.call_id}: jarvis says: {response_text[:80]}")
                                     call_manager.add_transcript("bot", response_text)
@@ -231,18 +228,12 @@ async def run_pipeline(ws: web.WebSocketResponse, timezone: str = "UTC"):
 
 
 async def get_llm_response(llm, user_text: str, call) -> str:
-    """Get a response from OpenClaw via Chat Completions API."""
+    """Get a response from OpenClaw main session via Chat Completions API.
+
+    Uses model "agent:main" and user "main" to route to the real Jarvis
+    with full memory, personality, tools, and current conversation context.
+    """
     import aiohttp
-
-    # Build conversation history from call transcript
-    messages = []
-    for entry in call.transcript[-20:]:  # Last 10 turns (20 entries)
-        role = "assistant" if entry.speaker == "bot" else "user"
-        messages.append({"role": role, "content": entry.text})
-
-    # Add current user message if not already in transcript
-    if not messages or messages[-1]["content"] != user_text:
-        messages.append({"role": "user", "content": user_text})
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -253,8 +244,20 @@ async def get_llm_response(llm, user_text: str, call) -> str:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "passthrough",
-                    "messages": messages,
+                    "model": "agent:main",
+                    "user": "main",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                f"[🎤 Voice Call] The user is speaking through the voice call app. "
+                                f"Respond concisely (1-3 sentences) — this will be converted to speech. "
+                                f"Do NOT use the tts tool. Do NOT include MEDIA: tags. "
+                                f"Just reply with plain text.\n\n"
+                                f'They said: "{user_text}"'
+                            ),
+                        }
+                    ],
                 },
                 ssl=False,
             ) as resp:
