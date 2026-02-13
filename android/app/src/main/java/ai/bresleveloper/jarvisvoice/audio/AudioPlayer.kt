@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class AudioPlayer {
     companion object {
@@ -15,6 +16,22 @@ class AudioPlayer {
     private val audioQueue = ConcurrentLinkedQueue<ByteArray>()
     private val isPlaying = AtomicBoolean(false)
     private var playThread: Thread? = null
+
+    // Track total frames written vs played for accurate "done" detection
+    private val totalFramesWritten = AtomicLong(0)
+
+    /**
+     * True if audio is queued OR AudioTrack is still playing buffered audio.
+     * Only returns false when the speaker has truly finished outputting sound.
+     */
+    val isSpeaking: Boolean
+        get() {
+            if (audioQueue.isNotEmpty()) return true
+            val track = audioTrack ?: return false
+            val written = totalFramesWritten.get()
+            if (written == 0L) return false
+            return track.playbackHeadPosition < written
+        }
 
     fun start() {
         val bufferSize = AudioTrack.getMinBufferSize(
@@ -41,6 +58,7 @@ class AudioPlayer {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
 
+        totalFramesWritten.set(0)
         audioTrack?.play()
         isPlaying.set(true)
 
@@ -49,6 +67,8 @@ class AudioPlayer {
                 val data = audioQueue.poll()
                 if (data != null) {
                     audioTrack?.write(data, 0, data.size)
+                    // 16-bit mono = 2 bytes per frame
+                    totalFramesWritten.addAndGet((data.size / 2).toLong())
                 } else {
                     Thread.sleep(10)
                 }
@@ -68,6 +88,7 @@ class AudioPlayer {
         playThread?.join(1000)
         playThread = null
         audioQueue.clear()
+        totalFramesWritten.set(0)
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null
