@@ -242,10 +242,10 @@ async def get_llm_response(llm, user_text: str, call) -> str:
                 headers={
                     "Authorization": f"Bearer {OPENCLAW_TOKEN}",
                     "Content-Type": "application/json",
+                    "X-OpenClaw-Session-Key": "main",
                 },
                 json={
                     "model": "agent:main",
-                    "user": "main",
                     "messages": [
                         {
                             "role": "user",
